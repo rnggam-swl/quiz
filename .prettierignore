@@ -1,0 +1,11 @@
+.next
+out
+build
+coverage
+test-results
+playwright-report
+pnpm-lock.yaml
+next-env.d.ts
+spec/reference-html
+src/lib/supabase/database.types.ts
+supabase/.temp

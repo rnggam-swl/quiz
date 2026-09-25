@@ -1,0 +1,5 @@
+allowBuilds:
+  sharp: false
+  # The CLI binary ships as an optional dependency (@supabase/cli-<platform>); no build step needed.
+  supabase: false
+  unrs-resolver: false

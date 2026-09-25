@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — docs/05-design-system.md.
+ * Editor = calm neutrals + one accent. Player = answer colours + the quiz theme.
+ * Contrast values are checked in src/lib/color.test.ts.
+ */
+
+:root {
+  color-scheme: light;
+
+  --canvas: #f8fafc;
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+
+  --fg: #111827;
+  --fg-muted: #475569;
+  --fg-subtle: #64748b;
+  --fg-placeholder: #94a3b8; /* 2.4:1 — placeholders and decoration only, never real text */
+
+  --accent: #2563eb;
+  --accent-hover: #1d4fd1;
+  --accent-fg: #2563eb; /* accent used as text/link colour */
+  --accent-soft: rgb(37 99 235 / 0.1);
+  --on-accent: #ffffff;
+
+  --success: #15803d;
+  --success-soft: rgb(22 163 74 / 0.12);
+  --warning: #b45309;
+  --warning-soft: rgb(245 158 11 / 0.14);
+  --danger: #dc2626;
+  --danger-soft: rgb(220 38 38 / 0.1);
+
+  /* Answer options: colour + shape (▲ ◆ ● ■ ★) so colour is never the only cue. */
+  --answer-1: #ce2c31;
+  --answer-2: #2f6feb;
+  --answer-3: #f5a524;
+  --answer-4: #0b7a6d;
+  --answer-5: #8e4ec6;
+  --on-answer-1: #ffffff;
+  --on-answer-2: #ffffff;
+  --on-answer-3: #1a1a24;
+  --on-answer-4: #ffffff;
+  --on-answer-5: #ffffff;
+
+  /* Quiz theme — overridden per quiz at runtime (set --on-theme with readableTextColor()). */
+  --theme-primary: #4f5bea;
+  --on-theme: #ffffff;
+  --theme-bg: #f0f0f5;
+
+  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-pop: 0 8px 24px rgb(15 23 42 / 0.14);
+}
+
+/* Dark tokens: follow the OS unless the page forces light, or force dark explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: #0b0f19;
+    --surface: #111827;
+    --surface-muted: #1f2937;
+    --line: #243044;
+    --line-strong: #374151;
+    --fg: #e5e7eb;
+    --fg-muted: #9ca3af;
+    --fg-subtle: #8b95a5;
+    --fg-placeholder: #6b7280;
+    --accent-fg: #60a5fa;
+    --accent-soft: rgb(96 165 250 / 0.15);
+    --success: #4ade80;
+    --success-soft: rgb(74 222 128 / 0.14);
+    --warning: #fbbf24;
+    --warning-soft: rgb(251 191 36 / 0.14);
+    --danger: #f87171;
+    --danger-soft: rgb(248 113 113 / 0.14);
+    --theme-bg: #0b0f19;
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.4);
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0b0f19;
+  --surface: #111827;
+  --surface-muted: #1f2937;
+  --line: #243044;
+  --line-strong: #374151;
+  --fg: #e5e7eb;
+  --fg-muted: #9ca3af;
+  --fg-subtle: #8b95a5;
+  --fg-placeholder: #6b7280;
+  --accent-fg: #60a5fa;
+  --accent-soft: rgb(96 165 250 / 0.15);
+  --success: #4ade80;
+  --success-soft: rgb(74 222 128 / 0.14);
+  --warning: #fbbf24;
+  --warning-soft: rgb(251 191 36 / 0.14);
+  --danger: #f87171;
+  --danger-soft: rgb(248 113 113 / 0.14);
+  --theme-bg: #0b0f19;
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-placeholder: var(--fg-placeholder);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-answer-1: var(--answer-1);
+  --color-answer-2: var(--answer-2);
+  --color-answer-3: var(--answer-3);
+  --color-answer-4: var(--answer-4);
+  --color-answer-5: var(--answer-5);
+  --color-on-answer-1: var(--on-answer-1);
+  --color-on-answer-2: var(--on-answer-2);
+  --color-on-answer-3: var(--on-answer-3);
+  --color-on-answer-4: var(--on-answer-4);
+  --color-on-answer-5: var(--on-answer-5);
+  --color-theme: var(--theme-primary);
+  --color-on-theme: var(--on-theme);
+  --color-theme-bg: var(--theme-bg);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+}
+
+@theme {
+  --animate-fade-up: fade-up 200ms ease-out both;
+  --animate-pop: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-shake: shake 300ms ease-in-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(0.9);
+    }
+    60% {
+      transform: scale(1.06);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-6px);
+    }
+    40%,
+    80% {
+      transform: translateX(6px);
+    }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-fg antialiased;
+  }
+
+  ::placeholder {
+    color: var(--fg-placeholder);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /*
+   * Pressable 3D pill — from the prototype's .pv-nav-btn.
+   * Colours come from --btn-bg / --btn-fg (set by <Button3D>).
+   */
+  .btn-3d {
+    --btn-bg: var(--theme-primary);
+    --btn-fg: var(--on-theme);
+    --btn-edge: color-mix(in srgb, var(--btn-bg) 78%, black);
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: 2px solid color-mix(in srgb, var(--btn-bg) 65%, white);
+    box-shadow: 0 4px 0 0 var(--btn-edge);
+    transform: translateY(0);
+    transition:
+      transform 80ms ease,
+      box-shadow 80ms ease,
+      filter 150ms ease;
+  }
+  .btn-3d:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+  .btn-3d:active:not(:disabled),
+  .btn-3d[data-pressed="true"] {
+    transform: translateY(3px);
+    border-color: var(--btn-bg);
+    box-shadow: 0 1px 0 0 var(--btn-edge);
+  }
+  .btn-3d:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

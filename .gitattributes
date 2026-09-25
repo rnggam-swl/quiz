@@ -1,0 +1,8 @@
+# Always LF in the working tree (Prettier and the husky hooks expect it),
+# regardless of core.autocrlf on Windows.
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.jpg binary
+*.webp binary
