@@ -16,6 +16,19 @@ export function createRandom(seed: number): () => number {
   };
 }
 
+/**
+ * Mix an attempt seed with a key (e.g. a question id) into an independent seed,
+ * so every question in an attempt shuffles differently (FNV-1a over the key).
+ */
+export function deriveSeed(seed: number, key: string): number {
+  let hash = (0x811c9dc5 ^ seed) >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
 /** Random 32-bit unsigned seed for a new attempt. */
 export function randomSeed(): number {
   const buf = new Uint32Array(1);

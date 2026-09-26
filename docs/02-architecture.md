@@ -137,8 +137,10 @@ Peserta (Player)                Next.js Server Action               Postgres (RP
 ## Identitas peserta
 
 - **Host** memakai Supabase Auth biasa (email atau Google).
-- **Peserta** memakai **Supabase anonymous sign-in**. Setiap peserta mendapat `auth.uid()`, sehingga RLS tetap berlaku tanpa perlu mendaftar. Sesi disimpan di `localStorage`, yang tetap berfungsi di dalam iframe (browser mempartisinya per situs induk).
-- **Ujian dengan daftar peserta** mewajibkan peserta login, atau memakai embed token dari sistem pemasang.
+- **Peserta** tidak punya akun. Saat bergabung, server membuat baris `participants` dan mengembalikan **participant token**, yaitu token bertanda tangan HMAC (`pt1.<payload>.<hmac>`, berlaku 30 hari, secret `PARTICIPANT_TOKEN_SECRET`). Klien menyimpannya di `localStorage` dan mengirimnya di setiap Server Action. Server Action memverifikasi token, lalu memakai client secret key untuk memanggil RPC khusus `service_role`.
+  - _Kenapa bukan Supabase anonymous sign-in (rencana awal)?_ Sesi Supabase disimpan di cookie `SameSite=Lax`, yang tidak dikirim browser di dalam iframe lintas situs. Akibatnya Server Action tidak bisa mengenali peserta di mode embed. `localStorage` tetap berfungsi di iframe karena dipartisi per situs induk. Bonus: tidak ada akun `auth.users` sampah untuk setiap peserta.
+  - Kode: [`src/lib/participant-token.ts`](../src/lib/participant-token.ts), [`src/app/play/actions.ts`](../src/app/play/actions.ts).
+- **Ujian dengan daftar peserta** (P4) mewajibkan peserta login (`participants.user_id`), atau memakai embed token dari sistem pemasang (`participants.external_id`).
 
 ## Realtime
 

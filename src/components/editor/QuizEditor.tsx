@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Eye, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -26,10 +26,13 @@ export function QuizEditor({
   initial,
   adapter,
   backHref,
+  headerActions,
 }: {
   initial: EditorInitialState;
   adapter: EditorAdapter;
   backHref: string;
+  /** Extra header buttons from the page (e.g. "Bagikan"); rendered inside the editor context. */
+  headerActions?: ReactNode;
 }) {
   const [store] = useState(() => createEditorStore(initial));
   const { saveNow } = useAutosave(store, adapter.saveDraft);
@@ -39,7 +42,7 @@ export function QuizEditor({
     <EditorProvider value={context}>
       <KeyboardShortcuts />
       <div className="flex h-dvh flex-col bg-canvas">
-        <EditorHeader backHref={backHref} />
+        <EditorHeader backHref={backHref} actions={headerActions} />
         <ConflictBanner />
         <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] lg:grid-cols-[288px_minmax(0,1fr)_320px] lg:grid-rows-1">
           <aside className="max-h-72 overflow-y-auto border-b border-line bg-surface lg:max-h-none lg:border-r lg:border-b-0">
@@ -57,7 +60,7 @@ export function QuizEditor({
   );
 }
 
-function EditorHeader({ backHref }: { backHref: string }) {
+function EditorHeader({ backHref, actions }: { backHref: string; actions?: ReactNode }) {
   const { store } = useEditorContext();
   const title = useEditor((s) => s.quiz.title);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -83,9 +86,10 @@ function EditorHeader({ backHref }: { backHref: string }) {
       />
       <SaveIndicator />
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="secondary" onClick={() => setPreviewOpen(true)}>
+        <Button variant="secondary" onClick={() => setPreviewOpen(true)} aria-label="Pratinjau">
           <Eye /> <span className="hidden sm:inline">Pratinjau</span>
         </Button>
+        {actions}
         <PublishButton />
       </div>
       {snapshot && (

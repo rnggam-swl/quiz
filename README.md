@@ -12,16 +12,23 @@ Next.js 16 (App Router, Turbopack) · React 19 · TypeScript (strict) · Tailwin
 
 ## Mulai
 
-Butuh Node.js 22+, pnpm (lewat `corepack enable`), dan Docker (untuk Supabase lokal).
+Butuh Node.js 22+ dan pnpm (lewat `corepack enable`). **Docker tidak wajib**: development memakai project Supabase cloud (gratis).
+
+1. Buat project di [supabase.com](https://supabase.com/dashboard). Pakai project terpisah untuk production nanti.
+2. Salin `.env.example` ke `.env.local`, lalu isi URL, publishable key, dan secret key dari **Project Settings → API Keys**, serta `PARTICIPANT_TOKEN_SECRET` (`openssl rand -base64 48`).
+3. Di **Authentication → URL Configuration**, set Site URL `http://localhost:3000` dan tambahkan Redirect URL `http://localhost:3000/**`.
+4. Terapkan migrasi dan jalankan aplikasi:
 
 ```bash
 pnpm install
-cp .env.example .env.local
-pnpm db:start          # Supabase lokal di Docker, cetak URL + key
+pnpm db:link           # sekali: pilih project, masukkan password database
+pnpm db:push           # terapkan supabase/migrations ke project cloud
 pnpm dev               # http://localhost:3000
 ```
 
-Isi `.env.local` dengan `API URL`, `Publishable key`, dan `Secret key` dari output `pnpm db:start` (atau `pnpm supabase status`). Halaman yang tidak memakai Supabase tetap jalan tanpa `.env.local`.
+Setiap ada migrasi baru, ujinya dulu dengan `pnpm test` (PGlite, tanpa Docker), lalu `pnpm db:push`. Halaman yang tidak memakai Supabase tetap jalan tanpa `.env.local`.
+
+Punya Docker? `pnpm db:start` menjalankan Supabase lengkap di lokal. Salin key dari `pnpm supabase status`.
 
 Khusus development:
 
@@ -30,16 +37,17 @@ Khusus development:
 
 ## Script
 
-| Script                             | Fungsi                                                                                 |
-| ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `pnpm dev` / `build` / `start`     | Next.js                                                                                |
-| `pnpm lint`                        | ESLint                                                                                 |
-| `pnpm typecheck`                   | `next typegen` + `tsc --noEmit`                                                        |
-| `pnpm format` / `format:check`     | Prettier (+ urutan class Tailwind)                                                     |
-| `pnpm test` / `test:watch`         | Vitest: `src/**/*.test.ts(x)` + migrasi/RLS di `supabase/tests` (PGlite, tanpa Docker) |
-| `pnpm test:e2e`                    | E2E (Playwright), folder `e2e/`. Test yang butuh DB jalan jika `E2E_SUPABASE=1`        |
-| `pnpm db:start` / `stop` / `reset` | Supabase lokal                                                                         |
-| `pnpm db:types`                    | Generate `src/lib/supabase/database.types.ts` dari DB lokal                            |
+| Script                             | Fungsi                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `pnpm dev` / `build` / `start`     | Next.js                                                                                 |
+| `pnpm lint`                        | ESLint                                                                                  |
+| `pnpm typecheck`                   | `next typegen` + `tsc --noEmit`                                                         |
+| `pnpm format` / `format:check`     | Prettier (+ urutan class Tailwind)                                                      |
+| `pnpm test` / `test:watch`         | Vitest: `src/**/*.test.ts(x)` + migrasi/RLS di `supabase/tests` (PGlite, tanpa Docker)  |
+| `pnpm test:e2e`                    | E2E (Playwright), folder `e2e/`. Test yang butuh DB jalan jika `E2E_SUPABASE=1`         |
+| `pnpm db:link` / `db:push`         | Hubungkan ke project cloud / terapkan migrasi ke sana                                   |
+| `pnpm db:types`                    | Generate `src/lib/supabase/database.types.ts` dari project cloud yang terhubung         |
+| `pnpm db:start` / `stop` / `reset` | Supabase lokal (butuh Docker, opsional); `pnpm db:types:local` untuk tipe dari DB lokal |
 
 Pre-commit hook (husky + lint-staged) menjalankan ESLint dan Prettier pada file yang di-stage.
 
@@ -66,5 +74,3 @@ src/
 supabase/          # config.toml, migrations/, tests/ (PGlite)
 e2e/               # Playwright
 ```
-
-# quiz

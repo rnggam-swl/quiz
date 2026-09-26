@@ -110,12 +110,14 @@ create table teams (
   color      text not null
 );
 
+-- ✅ P2 (supabase/migrations/20260926100000_practice_sessions.sql): sessions, participants,
+-- attempts, responses, quiz_embed_secrets. Kolom tim/nyawa ditambahkan di P5–P7.
 create table participants (
   id               uuid primary key default gen_random_uuid(),
   session_id       uuid not null references sessions on delete cascade,
-  user_id          uuid not null references auth.users,  -- anonim atau terdaftar
+  user_id          uuid references auth.users,          -- hanya peserta yang login (ujian, P4)
   external_id      text,                 -- dari embed token (sub)
-  nickname         text not null,
+  nickname         text not null,        -- unik per sesi, case-insensitive ("Budi", "Budi 2", …)
   avatar           text,
   team_id          uuid references teams,
   score            int  not null default 0,

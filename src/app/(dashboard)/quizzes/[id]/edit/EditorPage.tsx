@@ -7,6 +7,7 @@ import type { EditorAdapter, EditorInitialState } from "@/components/editor/type
 import { uploadQuizMedia } from "@/lib/supabase/upload";
 
 import { publishQuizAction, saveQuizDraftAction } from "../../actions";
+import { ShareButton } from "./ShareDialog";
 
 /** Wires the editor to Server Actions (save/publish) and Supabase Storage (uploads). */
 export function EditorPage({ initial, ownerId }: { initial: EditorInitialState; ownerId: string }) {
@@ -18,5 +19,12 @@ export function EditorPage({ initial, ownerId }: { initial: EditorInitialState; 
     }),
     [ownerId],
   );
-  return <QuizEditor initial={initial} adapter={adapter} backHref="/quizzes" />;
+  return (
+    <QuizEditor
+      initial={initial}
+      adapter={adapter}
+      backHref="/quizzes"
+      headerActions={<ShareButton quizId={initial.quiz.id} />}
+    />
+  );
 }
