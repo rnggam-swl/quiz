@@ -66,3 +66,5 @@ src/
 supabase/          # config.toml, migrations/, tests/ (PGlite)
 e2e/               # Playwright
 ```
+
+# quiz
