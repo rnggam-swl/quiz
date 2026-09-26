@@ -114,7 +114,7 @@ test("the quiz embeds on an allowed site and reports back; other sites are refus
   await page.getByLabel("Domain yang boleh memasang quiz ini").fill("https://sekolah.test");
   await page.getByRole("button", { name: "Simpan domain" }).click();
   await expect(page.getByText(/Domain disimpan/)).toBeVisible();
-  const snippet = await page.getByLabel("Snippet script").textContent();
+  const snippet = await page.getByLabel("Snippet script", { exact: true }).textContent();
   const slug = /data-quiz="([a-z0-9-]+)"/.exec(snippet ?? "")![1]!;
 
   const visitor = await browser.newContext();
