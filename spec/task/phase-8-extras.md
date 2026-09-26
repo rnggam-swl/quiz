@@ -27,3 +27,8 @@
 ## Skala
 
 - [ ] **P8-14** Evaluasi server game khusus (PartyKit / Durable Objects / Colyseus) jika uji beban P5 menunjukkan batas Supabase Realtime di bawah kebutuhan. Implementasi baru cukup di `engine/transport/`.
+
+## Perawatan
+
+- [ ] **P8-15** Bersihkan file yatim di bucket `quiz-media`: file milik quiz yang dihapus, dan media yang dilepas dari soal (di editor, hapus media hanya mengubah JSON soal). Usulan: job terjadwal yang membandingkan isi bucket dengan referensi di `questions.media`, `quizzes.cover_url`, dan `quiz_versions.snapshot`.
+- [ ] **P8-16** Lupa/reset password (email) dan ubah password di halaman akun.

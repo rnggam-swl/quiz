@@ -24,82 +24,96 @@ quiz/
 │  └─ task/                   # task per fase
 ├─ supabase/
 │  ├─ migrations/             # DDL, RLS, RPC
-│  └─ seed.sql
+│  └─ tests/                  # migrasi + RLS diuji di PGlite (Postgres in-memory, tanpa Docker)
+├─ e2e/                       # Playwright
 └─ src/
+   ├─ proxy.ts                # refresh sesi Supabase + redirect cepat (pengganti middleware di Next 16)
    ├─ app/
-   │  ├─ (auth)/              # login, register
-   │  ├─ (dashboard)/         # daftar quiz, laporan
-   │  │  └─ quizzes/[id]/edit # editor
-   │  ├─ join/                # masukkan kode
-   │  ├─ play/[sessionCode]/  # player latihan & live (HP peserta)
-   │  ├─ exam/[sessionCode]/  # player ujian
-   │  ├─ host/[sessionId]/    # layar host / proyektor (live & battle)
-   │  ├─ embed/[slug]/        # player versi embed (layout minimal)
-   │  └─ api/                 # route handler (embed token, webhook)
+   │  ├─ (auth)/              # login/daftar + Server Actions auth
+   │  ├─ auth/callback/       # OAuth & link konfirmasi email (PKCE)
+   │  ├─ (dashboard)/quizzes/ # daftar quiz, editor, Server Actions quiz
+   │  ├─ playground/          # galeri komponen + editor dengan adapter in-memory (dev saja)
+   │  ├─ join/                # masukkan kode (P2)
+   │  ├─ play/[sessionCode]/  # player latihan & live (HP peserta, P2)
+   │  ├─ exam/[sessionCode]/  # player ujian (P4)
+   │  ├─ host/[sessionId]/    # layar host / proyektor (P5)
+   │  └─ embed/[slug]/        # player versi embed (P2)
    ├─ questions/              # Question Type Registry
-   │  ├─ registry.ts
-   │  ├─ types.ts
+   │  ├─ types.ts             # kontrak QuestionDefinition
+   │  ├─ registry.ts          # daftar definisi (aman untuk server)
+   │  ├─ ui.tsx               # daftar Editor/Player per tipe (klien)
+   │  ├─ question.ts          # amplop soal (prompt, media, poin…) + validasi quiz
    │  ├─ multiple-choice/
-   │  │  ├─ schema.ts         # zod: config + answer
-   │  │  ├─ score.ts          # murni, tanpa I/O → mudah dites
-   │  │  ├─ validate.ts       # cek sebelum publish
+   │  │  ├─ definition.ts     # schema, defaults, validate, score, stripAnswers — murni
+   │  │  ├─ definition.test.ts
    │  │  ├─ Editor.tsx
-   │  │  ├─ Player.tsx
-   │  │  └─ index.ts
+   │  │  └─ Player.tsx
    │  └─ …                    # satu folder per tipe
-   ├─ engine/
-   │  ├─ policy.ts            # skema & default policy per mode
-   │  ├─ practice/  exam/  live/  battle/   # state machine & server actions
-   │  └─ transport/           # abstraksi realtime (Supabase sekarang)
+   ├─ engine/                 # mode sesi (P2+)
    ├─ components/
-   │  ├─ editor/              # shell editor 3 panel
-   │  ├─ player/              # shell player, tombol 3D, timer bar, feedback
+   │  ├─ editor/              # QuizEditor: store, autosave, daftar soal, canvas, panel, pratinjau
+   │  ├─ player/              # Button3D, AnswerShape, AnswerTile
+   │  ├─ host/                # header dashboard
    │  └─ ui/                  # komponen dasar
    └─ lib/
-      ├─ supabase/            # client browser, server, service-role
+      ├─ supabase/            # client browser/server/admin, proxy, upload, tipe DB
+      ├─ auth.ts              # Data Access Layer: getSessionUser, requireHost
+      ├─ quiz-data.ts         # baris DB ↔ model editor, validasi autosave di server
       └─ seed-random.ts       # PRNG dengan seed untuk acak soal/opsi
 ```
 
 ## Question Type Registry
 
-Semua tipe soal mengikuti satu kontrak. Menambah tipe baru berarti menambah satu folder dan mendaftarkannya, tanpa mengubah editor, player, atau engine.
+Setiap tipe soal dipecah menjadi dua bagian, supaya kode penilaian di server tidak pernah menarik komponen React:
+
+1. **`definition.ts`**, murni dan aman untuk server. Isinya skema, validasi, penilaian, dan `stripAnswers`.
+2. **`Editor.tsx` + `Player.tsx`**, untuk klien. Didaftarkan di `questions/ui.tsx`.
 
 ```ts
-// src/questions/types.ts
-export type Mode = "practice" | "exam" | "live" | "battle_buzzer" | "battle_royale";
-
-export interface ScoreResult {
-  correct: number; // unit benar
-  total: number; // unit total
-  ratio: number; // 0..1, dipakai untuk poin
-}
-
-export interface QuestionType<C, A> {
+// src/questions/types.ts (ringkas)
+export interface QuestionDefinition<Config, Answer, Public> {
   type: string;
   label: string;
-  icon: string;
-  configSchema: z.ZodType<C>; // disimpan di questions.config
-  answerSchema: z.ZodType<A>; // dikirim peserta
-  defaults(): C;
-  validate(config: C): string[]; // pesan error untuk publish
-  score(config: C, answer: A): ScoreResult;
-  stripAnswers(config: C, seed: number): unknown; // versi aman untuk peserta
+  description: string;
+  configSchema: z.ZodType<Config>; // disimpan di questions.config (termasuk kunci jawaban)
+  answerSchema: z.ZodType<Answer>; // dikirim peserta; dibatasi ukurannya
   capabilities: {
-    modes: Mode[];
-    avgSeconds: number; // estimasi waktu jawab
+    modes: Partial<Record<SessionMode, "ok" | "warn">>;
+    avgSeconds: number;
     partialCredit: boolean;
-    manualGrading?: boolean; // mis. esai
   };
-  Editor: React.FC<EditorProps<C>>;
-  Player: React.FC<PlayerProps<A>>; // menerima context mode (feedback on/off, locked, dsb.)
+  defaults(): Config;
+  validate(config: Config): Issue[]; // { path: "options.2.text", message } — path dipakai editor untuk menyorot field
+  score(config: Config, answer: Answer): ScoreResult; // { correct, total, ratio }
+  stripAnswers(config: Config, ctx: { seed: number; shuffle: boolean }): Public; // tanpa kunci jawaban
+  isAnswered(answer: Answer | null | undefined): boolean;
 }
+
+// src/questions/ui-types.ts
+type PlayerProps<Public, Answer, Config> = {
+  data: Public; // hasil stripAnswers
+  answer: Answer | null;
+  onAnswer(a: Answer): void;
+  onCommit?(a: Answer): void; // jawaban final (mis. tap pilihan tunggal)
+  disabled?: boolean;
+  reveal?: Config; // dikirim server setelah menjawab, untuk menampilkan benar/salah
+};
 ```
 
 Aturan:
 
-- `score()` dan `stripAnswers()` adalah **fungsi murni** dan diimpor oleh server. Keduanya tidak boleh bergantung pada React atau browser.
-- `stripAnswers()` juga bertugas mengacak opsi atau item dengan `seed`. Dengan begitu urutan yang dilihat peserta konsisten saat halaman dimuat ulang, dan server tetap bisa memetakan jawabannya.
-- `Player` tidak pernah tahu jawaban yang benar, kecuali saat server mengirim hasil (`reveal`).
+- `score()` dan `stripAnswers()` adalah **fungsi murni** yang diimpor server. Semua tipe diuji dengan test kontrak bersama di `registry.test.ts`, termasuk cek bahwa output `stripAnswers` tidak mengandung field kunci jawaban.
+- `stripAnswers()` mengacak dengan `seed`, sehingga urutan tetap konsisten saat halaman dimuat ulang. Untuk mode yang semua pesertanya harus melihat urutan sama (live/battle), pemanggil memberi seed sesi.
+- Id opsi/item memakai id stabil (`nanoid`), bukan indeks. Id soal adalah UUID yang dibuat di klien.
+- `Player` tidak pernah tahu jawaban benar sebelum server mengirim `reveal`.
+
+## Editor & autosave
+
+- `QuizEditor` menerima `EditorAdapter` (`saveDraft`, `publish`, `uploadMedia`). Halaman asli memakai Server Actions + Supabase Storage, sedangkan `/playground/editor` memakai adapter in-memory, supaya UI bisa dikembangkan tanpa database.
+- State editor ada di store Zustand per editor. Setiap edit menaikkan penghitung `edit`, dan autosave (`autosaver.ts`) membandingkannya dengan `savedEdit`.
+- Autosave: debounce 800 ms, maksimal satu request berjalan, edit yang terjadi saat menyimpan ikut di simpanan berikutnya, gagal → coba lagi dengan backoff (2–30 detik), konflik revisi → berhenti dan minta muat ulang.
+- Server menyimpan seluruh draf dalam satu transaksi (`save_quiz_draft`) dengan `draft_revision` sebagai optimistic lock, sehingga dua tab yang mengedit quiz yang sama terdeteksi.
+- Publish: validasi di klien untuk umpan balik cepat, lalu validasi ulang di server terhadap draf yang **tersimpan** pada revisi yang sama, baru snapshot (`publish_quiz`).
 
 ## Alur penilaian (server-authoritative)
 
@@ -160,13 +174,13 @@ Quiz yang di-publish menghasilkan baris `quiz_versions` berisi snapshot JSON sem
 
 ## Pemetaan dari prototipe
 
-| Prototipe (`formulir-builder-quiz-mode.html`) | Aplikasi                                          |
-| --------------------------------------------- | ------------------------------------------------- |
-| `FIELD_TYPES`, `applyTypeDefaults()`          | `questions/*/index.ts` → `defaults()`             |
-| `renderXEditor()`                             | `questions/*/Editor.tsx`                          |
-| `renderPvXInner()` + fungsi interaksi         | `questions/*/Player.tsx`                          |
-| `xScoreCompute()`, `scoreField()`             | `questions/*/score.ts` (dijalankan di server)     |
-| `validateQuizForPublish()`                    | `questions/*/validate.ts` + validasi tingkat quiz |
-| `formCfg.checkMode` (`end` / `instant`)       | `policy.feedback` (`end` / `instant` / `none`)    |
-| Gamifikasi (`gamifyOnCheck`)                  | `engine/practice` + komponen player               |
-| Panel Embed (snippet iframe)                  | `/embed/[slug]` + `embed.js`                      |
+| Prototipe (`formulir-builder-quiz-mode.html`) | Aplikasi                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `FIELD_TYPES`, `applyTypeDefaults()`          | `questions/*/definition.ts` → `defaults()`                         |
+| `renderXEditor()`                             | `questions/*/Editor.tsx`                                           |
+| `renderPvXInner()` + fungsi interaksi         | `questions/*/Player.tsx`                                           |
+| `xScoreCompute()`, `scoreField()`             | `definition.ts` → `score()` (dijalankan di server)                 |
+| `validateQuizForPublish()`                    | `definition.ts` → `validate()` + `validateQuiz()` di `question.ts` |
+| `formCfg.checkMode` (`end` / `instant`)       | `policy.feedback` (`end` / `instant` / `none`)                     |
+| Gamifikasi (`gamifyOnCheck`)                  | `engine/practice` + komponen player                                |
+| Panel Embed (snippet iframe)                  | `/embed/[slug]` + `embed.js`                                       |

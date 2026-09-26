@@ -27,8 +27,10 @@ create type round_status    as enum ('pending', 'countdown', 'open', 'resolving'
 
 ## Konten
 
+✅ Sudah diimplementasikan di [`supabase/migrations/20260926000000_content.sql`](../supabase/migrations/20260926000000_content.sql) (P1), beserta check constraint, trigger `updated_at`, dan RLS. Ringkasannya:
+
 ```sql
-create table profiles (
+create table profiles (                  -- dibuat otomatis saat daftar (bukan untuk peserta anonim)
   id           uuid primary key references auth.users on delete cascade,
   display_name text not null,
   avatar_url   text,
@@ -37,32 +39,35 @@ create table profiles (
 
 create table quizzes (
   id                     uuid primary key default gen_random_uuid(),
-  owner_id               uuid not null references profiles on delete cascade,
-  title                  text not null default 'Untitled quiz',
-  description            text,
+  owner_id               uuid not null default auth.uid() references profiles on delete cascade,
+  title                  text not null default '',
+  description            text not null default '',
   cover_url              text,
-  theme                  jsonb not null default '{}',   -- { primary, bg, font? }
+  theme                  jsonb not null default '{}',   -- { primary, bg }
   visibility             quiz_visibility not null default 'private',
-  slug                   text unique,                   -- untuk embed & link publik
+  slug                   text unique,                   -- dibuat saat publish pertama
   embed_allowed_origins  text[] not null default '{}',  -- kosong = embed dimatikan
+  draft_revision         int not null default 0,        -- naik tiap autosave (optimistic lock)
+  published_revision     int,                           -- draft_revision yang terakhir di-publish
   latest_version         int,                           -- versi publish terakhir
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
 );
 
 create table questions (                 -- draft yang sedang diedit
-  id           uuid primary key default gen_random_uuid(),
+  id           uuid primary key,          -- UUID dari editor (crypto.randomUUID)
   quiz_id      uuid not null references quizzes on delete cascade,
   position     int  not null,
   type         text not null,             -- kunci di registry
   prompt       text not null default '',
-  help         text,
+  help         text not null default '',
   media        jsonb not null default '[]',   -- [{ kind:'image'|'audio'|'video', url, alt }]
-  config       jsonb not null,                -- divalidasi configSchema tipe terkait
+  config       jsonb not null,                -- divalidasi configSchema tipe terkait (di server action)
   time_limit_s int,                           -- null = pakai default policy
   points       int  not null default 1000,
-  explanation  text,                          -- ditampilkan saat reveal/review
+  explanation  text not null default '',      -- ditampilkan saat reveal/review
   tags         text[] not null default '{}',  -- untuk bank soal
+  created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
 create index on questions (quiz_id, position);
@@ -76,6 +81,8 @@ create table quiz_versions (             -- snapshot immutable saat publish
   unique (quiz_id, version)
 );
 ```
+
+Bucket Storage `quiz-media` bersifat publik (peserta anonim harus bisa memuat gambar). Path-nya `{owner_id}/{quiz_id}/{uuid}.{ext}`, dan hanya pemilik yang boleh menulis di folder miliknya. Server action menolak URL media yang bukan dari bucket ini.
 
 ## Sesi & peserta
 
@@ -253,14 +260,16 @@ type Policy = {
 
 ## RPC utama
 
-| RPC                             | Pemanggil                   | Fungsi                                                           |
-| ------------------------------- | --------------------------- | ---------------------------------------------------------------- |
-| `join_session(code, nickname)`  | peserta                     | Validasi kode & status, buat `participants`                      |
-| `get_session_state(session_id)` | semua                       | State lengkap untuk reconnect                                    |
-| `start_attempt(session_id)`     | server                      | Buat attempt, seed, bank soal, deadline                          |
-| `record_response(...)`          | `service_role`              | Simpan jawaban + hasil nilai, tolak jika lewat deadline          |
-| `submit_attempt(attempt_id)`    | server                      | Kunci attempt, hitung skor total                                 |
-| `advance_round(session_id)`     | server (atas perintah host) | Pindah tahap live/battle, validasi transisi                      |
-| `record_battle_answer(...)`     | `service_role`              | Satu transaksi: simpan jawaban, tentukan pemenang, kunci putaran |
-| `resolve_round(round_id)`       | server                      | Battle royale: kurangi nyawa, tentukan eliminasi                 |
-| `expire_attempts()`             | `pg_cron` tiap menit        | Tandai attempt yang lewat deadline sebagai `expired`             |
+| RPC                                                        | Pemanggil                   | Fungsi                                                                                                                       |
+| ---------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `save_quiz_draft(quiz, base_revision, meta, questions)` ✅ | host (RLS)                  | Ganti seluruh draf dalam satu transaksi; `revision_conflict` jika revisi basi; id soal milik quiz lain tidak pernah dipindah |
+| `publish_quiz(quiz, base_revision, slug)` ✅               | host (RLS)                  | Snapshot draf tersimpan menjadi versi berikutnya; slug hanya diisi sekali                                                    |
+| `join_session(code, nickname)`                             | peserta                     | Validasi kode & status, buat `participants`                                                                                  |
+| `get_session_state(session_id)`                            | semua                       | State lengkap untuk reconnect                                                                                                |
+| `start_attempt(session_id)`                                | server                      | Buat attempt, seed, bank soal, deadline                                                                                      |
+| `record_response(...)`                                     | `service_role`              | Simpan jawaban + hasil nilai, tolak jika lewat deadline                                                                      |
+| `submit_attempt(attempt_id)`                               | server                      | Kunci attempt, hitung skor total                                                                                             |
+| `advance_round(session_id)`                                | server (atas perintah host) | Pindah tahap live/battle, validasi transisi                                                                                  |
+| `record_battle_answer(...)`                                | `service_role`              | Satu transaksi: simpan jawaban, tentukan pemenang, kunci putaran                                                             |
+| `resolve_round(round_id)`                                  | server                      | Battle royale: kurangi nyawa, tentukan eliminasi                                                                             |
+| `expire_attempts()`                                        | `pg_cron` tiap menit        | Tandai attempt yang lewat deadline sebagai `expired`                                                                         |

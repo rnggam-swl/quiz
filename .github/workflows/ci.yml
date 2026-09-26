@@ -69,6 +69,8 @@ jobs:
       - run: pnpm build
 
       - run: pnpm test:e2e
+        env:
+          E2E_SUPABASE: "1"
 
       - uses: actions/upload-artifact@v4
         if: failure()

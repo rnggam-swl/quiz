@@ -12,8 +12,9 @@ import type { Database } from "./database.types";
  * Acts as the request's user under RLS. Create one per request — never share it.
  */
 export async function createClient() {
-  const env = getPublicEnv();
+  // cookies() first: it marks the route dynamic, so builds never evaluate env for it.
   const cookieStore = await cookies();
+  const env = getPublicEnv();
 
   return createServerClient<Database>(
     env.NEXT_PUBLIC_SUPABASE_URL,

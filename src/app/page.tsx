@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AnswerShape, ANSWER_SLOTS } from "@/components/player/AnswerShape";
+import { Button3D } from "@/components/player/Button3D";
 import { site } from "@/lib/site";
 
 const modes = [
@@ -36,19 +37,23 @@ export default function HomePage() {
         ))}
       </ul>
 
-      <p className="text-sm text-fg-subtle">
-        Sedang dibangun — fase P0 (fondasi).
+      <div className="flex flex-wrap items-center gap-3">
+        <Button3D asChild size="lg">
+          <Link href="/quizzes">Mulai bikin quiz</Link>
+        </Button3D>
         {process.env.NODE_ENV !== "production" && (
-          <>
-            {" "}
-            Lihat komponen di{" "}
+          <p className="text-sm text-fg-subtle">
+            Development:{" "}
             <Link href="/playground" className="font-medium text-accent-fg underline">
-              /playground
+              komponen
+            </Link>{" "}
+            ·{" "}
+            <Link href="/playground/editor" className="font-medium text-accent-fg underline">
+              editor tanpa Supabase
             </Link>
-            .
-          </>
+          </p>
         )}
-      </p>
+      </div>
     </main>
   );
 }

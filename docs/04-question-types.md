@@ -47,7 +47,8 @@ answer: { selectedIds: string[] }
 
 - **Tunggal:** benar jika `selectedIds` sama persis dengan `correctIds`.
 - **Banyak:** nilai parsial = `max(0, benarDipilih − salahDipilih) / jumlahBenar`, supaya memilih semua opsi tidak menguntungkan.
-- **Validasi:** minimal 2 opsi, minimal 1 jawaban benar, dan tidak ada opsi kosong.
+- **Validasi:** minimal 2 dan maksimal 5 opsi (satu per warna + bentuk di player), minimal 1 jawaban benar (tepat 1 untuk mode tunggal), tidak ada opsi kosong, dan tidak ada opsi kembar.
+- **Player:** pilihan tunggal langsung terjawab saat diketuk (`answersOnTap`), sedangkan pilihan banyak memakai tombol “Kirim”.
 - **Strip:** hapus `correctIds`, acak `options`.
 - **Catatan prototipe:** `singlechoice`/`multiselect` belum punya kunci jawaban (`scoreField` mengembalikan `null`). Ini celah terbesar yang harus ditutup di P1.
 
@@ -65,12 +66,12 @@ answer: {
 ## Isian Singkat — `short_answer`
 
 ```ts
-config: { accepted: string[]; caseSensitive: boolean; trim: boolean; fuzzy?: 0 | 1 | 2 }
+config: { accepted: string[]; caseSensitive: boolean; fuzzy: 0 | 1 | 2 }
 answer: { text: string }
 ```
 
-- Normalisasi: `trim` → lowercase (kecuali `caseSensitive`) → rapikan spasi ganda → (opsional) buang diakritik.
-- `fuzzy` adalah jarak Levenshtein maksimum yang masih diterima, untuk toleransi salah ketik.
+- Normalisasi: NFKC → trim → rapikan spasi ganda → lowercase (kecuali `caseSensitive`).
+- `fuzzy` adalah jarak Levenshtein maksimum yang masih diterima, untuk toleransi salah ketik. Hanya berlaku untuk jawaban minimal 4 huruf, supaya “cat” tidak menerima “car”.
 
 ## Angka — `number`
 
@@ -107,7 +108,8 @@ answer: { pairs: { leftId: string; rightId: string }[] }
 ```
 
 - `correct` = jumlah pasangan jawaban yang ada di `pairs`, dikurangi pasangan salah, dengan batas bawah 0. `total = pairs.length`.
-- **Strip:** hapus `pairs`, acak `right`.
+- **Strip:** hapus `pairs`. Kolom kanan **selalu** diacak (tidak pernah sama dengan urutan penulisan), walaupun `shuffle` mati.
+- **Player:** ketuk item di kiri lalu pasangannya di kanan. Pasangan ditandai dengan bentuk + warna item yang sama, tanpa garis, supaya sama nyamannya di HP dan proyektor.
 - **Prototipe:** interaksi klik kiri → kanan dengan garis bezier berwarna (`matchDrawLines`) dipertahankan. Model datanya diubah dari `items[].pairs[]` menjadi `left`/`right`/`pairs` agar kolom kanan bisa diacak tanpa membocorkan pasangan.
 
 ## Odd One Out — `odd_one_out`
@@ -188,8 +190,8 @@ answer: { text: string }
 
 ## Menambah tipe soal baru (checklist)
 
-1. Buat `src/questions/<tipe>/` berisi `schema.ts`, `score.ts`, `validate.ts`, `Editor.tsx`, `Player.tsx`, `index.ts`.
-2. Tulis unit test `score.test.ts` untuk kasus benar, salah, parsial, dan jawaban kosong/tidak valid.
-3. Tulis test `stripAnswers` untuk memastikan tidak ada kunci jawaban di output (cek dengan `JSON.stringify`).
-4. Daftarkan di `registry.ts`.
+1. Buat `src/questions/<tipe>/` berisi `definition.ts` (murni), `definition.test.ts`, `Editor.tsx`, dan `Player.tsx`.
+2. Di `definition.test.ts`, uji kasus benar, salah, parsial, dan jawaban kosong/tidak valid, serta hasil `stripAnswers`.
+3. Daftarkan definisi di `registry.ts` dan UI-nya di `ui.tsx`.
+4. Tambahkan field kunci jawabannya ke `ANSWER_KEYS` di `registry.test.ts`. Test kontrak bersama akan memastikan field itu tidak pernah bocor.
 5. Tambahkan baris di matriks kapabilitas dokumen ini.
