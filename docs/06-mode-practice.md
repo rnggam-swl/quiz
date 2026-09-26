@@ -23,9 +23,9 @@ Peserta mengerjakan quiz sendiri, kapan saja, lewat link, kode, atau embed. Mode
 ## Alur
 
 1. Peserta membuka `/play/{code}` atau `/embed/{slug}`.
-2. Peserta mengisi nickname. Sistem melakukan anonymous sign-in, lalu memanggil `join_session`.
-3. Server memanggil `start_attempt`, yang membuat seed dan urutan soal.
-4. Klien memanggil `get_play_payload(attemptId)` dan menerima soal versi aman (`stripAnswers`).
+2. Peserta mengisi nickname (disaring dari kata kasar). Server memanggil `join_session` (nickname kembar menjadi "Budi 2"), lalu mengembalikan _participant token_ yang disimpan di `localStorage`.
+3. `startAttemptAction(token)` membuat seed dan urutan soal di TypeScript, lalu `start_attempt` menyimpannya secara atomik. Kalau masih ada attempt terbuka, attempt itu yang dilanjutkan.
+4. Respons yang sama berisi soal versi aman (`stripAnswers` dengan seed per soal, supaya pola urutan opsi tidak berulang antar soal), plus jawaban yang sudah tersimpan untuk melanjutkan.
 5. Untuk setiap soal:
    - Peserta menjawab. Server Action `submitAnswer` menilai dan menyimpan jawaban lewat `record_response`.
    - Jika `feedback = 'instant'`, respons berisi `{ correct, total, points, reveal }`. `reveal` berisi jawaban benar dan penjelasan, jika `showCorrectAnswer`.
@@ -50,6 +50,6 @@ Diambil dari lapisan gamifikasi prototipe (`gamifyOnCheck`, `gamifyComputeRetro`
 
 ## Kasus khusus
 
-- **Halaman dimuat ulang:** attempt `in_progress` dilanjutkan, dan jawaban yang sudah tersimpan dimuat ulang.
-- **Offline sesaat:** jawaban diantrikan di klien dan dikirim ulang. Unique `(attempt_id, question_id)` membuat pengiriman ulang aman, karena server memakai upsert.
-- **Quiz di-publish ulang saat peserta mengerjakan:** attempt tetap memakai versi lama, karena sesi terikat ke `quiz_version_id`.
+- **Halaman dimuat ulang:** attempt `in_progress` dilanjutkan, beserta jawaban dan feedback-nya. Kalau attempt terakhir sudah selesai, player menampilkan "Kamu sudah pernah mengerjakan quiz ini" + **Mulai lagi**, dan tidak diam-diam membuat attempt baru.
+- **Offline sesaat:** pengiriman diulang otomatis 3× (0,8 / 2 / 4 detik). Kalau masih gagal, muncul "Koneksi terputus" + **Coba lagi**. Jawaban yang sama aman dikirim ulang: mode instan menjawab `already_answered` (dianggap sukses), mode akhir memakai upsert. Antrean offline yang bertahan setelah reload belum dibuat (lihat P2-17).
+- **Quiz di-publish ulang saat peserta mengerjakan:** attempt yang sedang berjalan tetap memakai versinya sendiri (`attempts.quiz_version_id`). Sesi latihan default mengikuti versi terbaru (`sessions.quiz_version_id = null`), jadi attempt berikutnya memakai versi baru. Ujian nanti bisa mengunci versi.

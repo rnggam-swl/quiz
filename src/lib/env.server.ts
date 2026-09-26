@@ -15,3 +15,14 @@ export function getServerEnv(): PublicEnv & z.infer<typeof serverEnvSchema> {
     ...parseEnv(serverEnvSchema, { SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY }),
   };
 }
+
+const participantSecretSchema = z.object({
+  PARTICIPANT_TOKEN_SECRET: z.string().min(32, "Minimal 32 karakter acak."),
+});
+
+/** HMAC key for participant tokens (docs/02-architecture.md#identitas-peserta). */
+export function getParticipantTokenSecret(): string {
+  return parseEnv(participantSecretSchema, {
+    PARTICIPANT_TOKEN_SECRET: process.env.PARTICIPANT_TOKEN_SECRET,
+  }).PARTICIPANT_TOKEN_SECRET;
+}

@@ -22,7 +22,8 @@ export async function createTestDb(): Promise<PGlite> {
   return db;
 }
 
-export type Actor = { role: "anon" } | { role: "authenticated"; userId: string };
+export type Actor =
+  { role: "anon" } | { role: "service_role" } | { role: "authenticated"; userId: string };
 
 /**
  * Run `fn` as a Supabase API caller (RLS applies), inside a transaction that is
@@ -60,3 +61,5 @@ export async function createUser(
 
 export const user = (userId: string): Actor => ({ role: "authenticated", userId });
 export const anon: Actor = { role: "anon" };
+/** What Server Actions use (via the secret key) after verifying a participant token. */
+export const service: Actor = { role: "service_role" };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRandom, sample, shuffle, shuffleAvoidingIdentity } from "./seed-random";
+import { createRandom, deriveSeed, sample, shuffle, shuffleAvoidingIdentity } from "./seed-random";
 
 const letters = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 
@@ -61,6 +61,23 @@ describe("shuffleAvoidingIdentity", () => {
   it("returns short lists unchanged", () => {
     expect(shuffleAvoidingIdentity(["only"], 1)).toEqual(["only"]);
     expect(shuffleAvoidingIdentity([], 1)).toEqual([]);
+  });
+});
+
+describe("deriveSeed", () => {
+  it("is deterministic and differs per key and per seed", () => {
+    expect(deriveSeed(7, "q1")).toBe(deriveSeed(7, "q1"));
+    expect(deriveSeed(7, "q1")).not.toBe(deriveSeed(7, "q2"));
+    expect(deriveSeed(7, "q1")).not.toBe(deriveSeed(8, "q1"));
+  });
+
+  it("gives questions with the same option count different shuffles", () => {
+    const orders = new Set(
+      Array.from({ length: 10 }, (_, i) =>
+        shuffle(letters, deriveSeed(123, `question-${i}`)).join(""),
+      ),
+    );
+    expect(orders.size).toBeGreaterThan(8);
   });
 });
 

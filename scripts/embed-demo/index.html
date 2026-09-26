@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo embed quiz (origin lain)</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 760px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #1f2937;
+        background: #fff7ed;
+      }
+      code {
+        background: #fde68a;
+        padding: 0 0.25rem;
+        border-radius: 4px;
+      }
+      #log {
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        background: #111827;
+        color: #a7f3d0;
+        padding: 1rem;
+        border-radius: 12px;
+        min-height: 6rem;
+        white-space: pre-wrap;
+      }
+      button {
+        margin-right: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Blog sekolah (situs lain)</h1>
+    <p>
+      Halaman ini sengaja berjalan di origin berbeda (<code>http://localhost:5500</code>). Tambahkan
+      origin itu ke daftar domain di panel Embed editor, lalu buka
+      <code>?quiz=SLUG-QUIZ</code> (opsional: <code>&amp;app=http://localhost:3000</code>,
+      <code>&amp;token=JWT</code>).
+    </p>
+    <p>
+      <button id="restart" type="button">restart()</button>
+      <button id="dark" type="button">setTheme({ mode: "dark" })</button>
+      <button id="pink" type="button">setTheme({ primary: "#be185d" })</button>
+    </p>
+    <div id="quiz"></div>
+    <h2>Event dari iframe</h2>
+    <div id="log"></div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const app = params.get("app") || "http://localhost:3000";
+      const container = document.getElementById("quiz");
+      container.setAttribute("data-quiz", params.get("quiz") || "");
+      if (params.get("token")) container.setAttribute("data-token", params.get("token"));
+
+      const log = document.getElementById("log");
+      for (const type of ["ready", "resize", "started", "answered", "completed"]) {
+        container.addEventListener("quiz:" + type, (e) => {
+          log.textContent += `quiz:${type} ${JSON.stringify(e.detail)}\n`;
+        });
+      }
+      document.getElementById("restart").onclick = () => container.quiz?.restart();
+      document.getElementById("dark").onclick = () => container.quiz?.setTheme({ mode: "dark" });
+      document.getElementById("pink").onclick = () =>
+        container.quiz?.setTheme({ primary: "#be185d" });
+
+      const loader = document.createElement("script");
+      loader.src = app + "/embed.js";
+      loader.async = true;
+      document.body.appendChild(loader);
+    </script>
+  </body>
+</html>

@@ -21,3 +21,12 @@ export function timeAgo(date: Date | string, now = new Date()): string {
 export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
+
+/** "4:07" or "1:02:30" between two timestamps. */
+export function formatDuration(from: Date | string, to: Date | string): string {
+  const total = Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}

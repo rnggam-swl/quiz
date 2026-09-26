@@ -5,76 +5,18 @@ import { useState } from "react";
 import { QuizEditor } from "@/components/editor/QuizEditor";
 import type { EditorAdapter, EditorInitialState } from "@/components/editor/types";
 import { mediaKindOf } from "@/lib/media";
-import { createQuestion, type Question } from "@/questions/question";
+import { createQuestion } from "@/questions/question";
+
+import { sampleQuiz } from "../sample";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function sample(): EditorInitialState {
-  const mc = createQuestion("multiple_choice");
-  const mcConfig = {
-    options: [
-      { id: "o1", text: "Jakarta" },
-      { id: "o2", text: "Bandung" },
-      { id: "o3", text: "Surabaya" },
-      { id: "o4", text: "Nusantara" },
-    ],
-    correctIds: ["o1"],
-    multiple: false,
-  };
-  const questions: Question[] = [
-    {
-      ...mc,
-      prompt: "Apa ibu kota Indonesia pada tahun 2020?",
-      config: mcConfig,
-      explanation: "IKN baru ditetapkan sesudahnya.",
-    },
-    {
-      ...createQuestion("true_false"),
-      prompt: "Matahari terbit dari barat.",
-      config: { correct: false },
-    },
-    {
-      ...createQuestion("short_answer"),
-      prompt: "Siapa proklamator kemerdekaan Indonesia bersama Hatta?",
-      config: { accepted: ["Soekarno", "Sukarno"], caseSensitive: false, fuzzy: 1 },
-    },
-    {
-      ...createQuestion("number"),
-      prompt: "Berapa percepatan gravitasi bumi?",
-      config: { value: 9.8, tolerance: 0.1, unit: "m/s²" },
-    },
-    {
-      ...createQuestion("matching"),
-      prompt: "Pasangkan hewan dengan kelompoknya.",
-      config: {
-        left: [
-          { id: "L1", text: "Mamalia" },
-          { id: "L2", text: "Reptil" },
-        ],
-        right: [
-          { id: "R1", text: "Kucing" },
-          { id: "R2", text: "Paus" },
-          { id: "R3", text: "Kadal" },
-          { id: "R4", text: "Batu" },
-        ],
-        pairs: [
-          { leftId: "L1", rightId: "R1" },
-          { leftId: "L1", rightId: "R2" },
-          { leftId: "L2", rightId: "R3" },
-        ],
-      },
-    },
-    createQuestion("multiple_choice"),
-  ];
+  const { quiz, questions } = sampleQuiz();
   return {
-    quiz: {
-      id: "playground-quiz",
-      title: "Kuis Pengetahuan Umum",
-      description: "",
-      coverUrl: null,
-      theme: {},
-    },
-    questions,
+    quiz,
+    // An empty question at the end, to try the publish issues list.
+    questions: [...questions, createQuestion("multiple_choice")],
     revision: 0,
     publishedRevision: null,
     latestVersion: null,

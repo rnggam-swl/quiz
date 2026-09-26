@@ -36,7 +36,7 @@ export function SaveIndicator() {
       <Icon
         className={cn("size-4", (status === "saving" || status === "dirty") && "animate-spin")}
       />
-      <span className="hidden sm:inline">{LABELS[status]}</span>
+      <span className="sr-only sm:not-sr-only">{LABELS[status]}</span>
     </span>
   );
 }

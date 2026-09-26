@@ -7,6 +7,8 @@
 
 ## Database
 
+> ✅ Migrasi sudah diterapkan ke Supabase cloud `itqwtzazzbwgiapwbpmy` (`pnpm db:push`), dan hasilnya dicek lewat API: 9 tabel ada, anon ditolak membaca tabel, bucket `quiz-media` publik dengan batas yang benar.
+
 - [x] **P1-01** Migrasi: enum, `profiles`, `quizzes`, `questions`, `quiz_versions` + trigger `updated_at`.
   - [`supabase/migrations/20260926000000_content.sql`](../../supabase/migrations/20260926000000_content.sql). Ditambah `draft_revision`/`published_revision` untuk optimistic lock dan status "ada perubahan", RPC `save_quiz_draft` & `publish_quiz`, serta check constraint panjang teks.
 - [x] **P1-02** Trigger pembuatan `profiles` saat user mendaftar. User anonim (peserta, P2) sengaja tidak dibuatkan profil.

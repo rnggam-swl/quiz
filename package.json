@@ -16,8 +16,12 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
-    "prepare": "husky"
+    "db:link": "supabase link",
+    "db:push": "supabase db push --linked",
+    "db:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts",
+    "db:types:local": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
+    "prepare": "husky",
+    "embed:demo": "node scripts/embed-demo/serve.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,mts}": [
@@ -32,6 +36,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.1",
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",
@@ -43,6 +48,7 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "uqr": "^0.1.3",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
@@ -50,6 +56,7 @@
     "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
