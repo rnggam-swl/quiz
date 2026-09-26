@@ -3,7 +3,7 @@
 **Tujuan:** guru bisa login, membuat quiz dengan 5 tipe soal, mengunggah media, dan mem-publish quiz (snapshot versi).
 **Referensi:** [03-data-model](../../docs/03-data-model.md), [04-question-types](../../docs/04-question-types.md), [05-design-system](../../docs/05-design-system.md), prototipe (editor mode quiz)
 
-> **Status verifikasi.** Semua kode P1 sudah ditulis. Logika murni, SQL/RLS (di PGlite), dan UI editor (lewat `/playground/editor` dengan adapter in-memory) sudah teruji. Bagian yang butuh Supabase asli ditandai 🚧: auth, dashboard, simpan/publish ke DB, upload ke Storage, dan E2E. Mesin ini belum punya Docker, jadi bagian itu akan terverifikasi saat Supabase lokal/cloud tersedia atau saat CI berjalan setelah push.
+> **Status verifikasi.** Logika murni, SQL/RLS (PGlite), dan UI editor (`/playground/editor`) sudah teruji. **E2E ke Supabase sungguhan lolos di [CI main](https://github.com/rnggam-swl/quiz/actions/runs/36205753359)**: daftar → buat quiz → tambah soal → autosave + reload → publish → badge "Terbit · v1". Yang masih 🚧 hanya bagian yang belum dicakup E2E: duplikat/hapus/cari di dashboard, upload ke Storage, dan Google login.
 
 ## Database
 
@@ -19,11 +19,12 @@
 
 ## Auth & dashboard
 
-- [ ] 🚧 **P1-05** Login / daftar dengan email + Google (Supabase Auth), plus `src/proxy.ts` (pengganti `middleware` di Next.js 16) untuk refresh sesi Supabase dan proteksi route dashboard.
+- [x] **P1-05** Login / daftar dengan email + Google (Supabase Auth), plus `src/proxy.ts` (pengganti `middleware` di Next.js 16) untuk refresh sesi Supabase dan proteksi route dashboard.
   - ✅ Halaman `/login` (masuk/daftar), Server Actions, `/auth/callback` (PKCE), `proxy.ts`, dan DAL `requireHost()`. Redirect `/quizzes` → `/login?next=…` dan validasi form sudah dicek di browser.
-  - ⏳ Masuk/daftar sungguhan butuh Supabase. Google tersedia di balik `NEXT_PUBLIC_AUTH_GOOGLE=true` dan perlu kredensial OAuth. Reset password belum ada (dipindah ke P8).
+  - ✅ Daftar dengan email + password ke Supabase sungguhan terbukti di E2E ([CI main](https://github.com/rnggam-swl/quiz/actions/runs/36205753359)).
+  - ⏳ Google tersedia di balik `NEXT_PUBLIC_AUTH_GOOGLE=true` dan perlu kredensial OAuth, belum diuji. Reset password dipindah ke P8.
 - [ ] 🚧 **P1-06** Dashboard daftar quiz: kartu (cover, judul, jumlah soal, terakhir diubah), buat baru, duplikat, hapus (dengan konfirmasi), dan pencarian.
-  - ✅ Kode lengkap: `/quizzes` dengan status Draf / Terbit / Ada perubahan. ⏳ Butuh Supabase untuk diuji.
+  - ✅ Buat quiz dan status "Terbit · v1" terbukti di E2E. ⏳ Duplikat, hapus, dan pencarian belum dicakup E2E.
 
 ## Registry & tipe soal
 
@@ -55,17 +56,17 @@
 
 - [x] **P1-21** Validasi publish: `validate()` per soal + validasi tingkat quiz (minimal 1 soal, judul terisi). Tampilkan daftar masalah yang bisa diklik dan langsung melompat ke soal terkait (pengganti `alert()` di prototipe).
   - Field yang bermasalah disorot merah dan soalnya diberi tanda di daftar. Server memvalidasi ulang draf tersimpan sebelum snapshot.
-- [ ] 🚧 **P1-22** Aksi publish: buat `quiz_versions` (snapshot), update `latest_version`, buat `slug` jika belum ada. Tampilkan badge "Ada perubahan belum di-publish".
-  - ✅ RPC teruji di PGlite dan alur UI teruji dengan adapter in-memory. ⏳ Alur penuh ke Supabase belum diuji.
+- [x] **P1-22** Aksi publish: buat `quiz_versions` (snapshot), update `latest_version`, buat `slug` jika belum ada. Tampilkan badge "Ada perubahan belum di-publish".
+  - ✅ RPC teruji di PGlite, dan alur penuh ke Supabase terbukti di E2E CI.
 
 ## Test
 
-- [ ] 🚧 **P1-23** E2E: daftar → buat quiz → tambah soal → autosave + reload → publish.
+- [x] **P1-23** E2E: daftar → buat quiz → tambah soal → autosave + reload → publish.
   - [`e2e/builder.spec.ts`](../../e2e/builder.spec.ts) memakai 2 tipe (Pilihan Ganda, Benar/Salah). Test ini hanya jalan jika `E2E_SUPABASE=1` (otomatis di CI). Kelima tipe sudah dicoba manual di `/playground/editor`.
 
 ## Definition of Done
 
-- [ ] Guru bisa membuat quiz 10 soal (campuran 5 tipe) dan mem-publish-nya. Sudah terbukti di playground (5 tipe, publish), tapi menunggu uji dengan Supabase.
+- [x] Guru bisa membuat quiz 10 soal (campuran 5 tipe) dan mem-publish-nya. Lima tipe dan publish terbukti di playground; alur simpan + publish ke Supabase terbukti di E2E CI.
 - [x] Semua tipe soal punya test `score` & `stripAnswers` yang lulus, termasuk test bahwa kunci jawaban tidak ada di output strip.
-- [ ] Refresh halaman editor tidak menghilangkan perubahan apa pun (autosave). Sudah ada di E2E, menunggu Supabase.
+- [x] Refresh halaman editor tidak menghilangkan perubahan apa pun (autosave). Terbukti di E2E CI (reload lalu soal masih ada).
 - [x] Editor bisa dipakai penuh dengan keyboard untuk alur utama.
