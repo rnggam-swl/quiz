@@ -117,7 +117,9 @@ test("the quiz embeds on an allowed site and reports back; other sites are refus
   const snippet = await page.getByLabel("Snippet script", { exact: true }).textContent();
   const slug = /data-quiz="([a-z0-9-]+)"/.exec(snippet ?? "")![1]!;
 
-  const visitor = await browser.newContext();
+  // Chrome's Local Network Access blocks a public site from loading the app on localhost
+  // unless the visitor allows it; a real deployment is on a public domain and needs nothing.
+  const visitor = await browser.newContext({ permissions: ["local-network-access"] });
   const site = await visitor.newPage();
   for (const origin of ["https://sekolah.test", "https://bukan-sekolah.test"]) {
     await site.route(`${origin}/`, (route) =>

@@ -128,6 +128,7 @@ Lalu di halaman: `<div data-quiz="SLUG" data-token="<?= htmlspecialchars($token)
 1. Publish quiz, buka **Bagikan → Embed**, lalu tambahkan `http://localhost:5500` ke daftar domain.
 2. Jalankan `pnpm embed:demo`, lalu buka `http://localhost:5500/?quiz=SLUG`. Halaman demo menampilkan semua event dan tombol `restart()`/`setTheme()`.
 3. Daftar domain di-cache proxy selama ±1 menit.
+4. Chrome (fitur _Local Network Access_) memblokir situs publik yang memuat app dari `localhost`, atau meminta izin dulu ke pengunjung. Demo di `localhost:5500` tidak kena karena sama-sama loopback. E2E memakai situs palsu `https://sekolah.test`, jadi konteks browsernya diberi izin `local-network-access`. Di produksi app ada di domain publik, jadi tidak ada prompt apa pun.
 
 ## Ujian lewat embed
 
