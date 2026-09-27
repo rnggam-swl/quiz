@@ -1,5 +1,5 @@
 import type { Policy } from "@/engine/policy";
-import { deriveSeed, shuffle } from "@/lib/seed-random";
+import { deriveSeed, sample, shuffle } from "@/lib/seed-random";
 import { getDefinition } from "@/questions/registry";
 import { scoreResult } from "@/questions/shared";
 import type { ScoreResult } from "@/questions/types";
@@ -14,11 +14,32 @@ import type {
   ReviewItem,
 } from "./types";
 
-/** Question order and the maximum score for a new attempt. */
+/**
+ * The questions a pool may draw from: those with one of the pool's tags (case-insensitive),
+ * or every question when the pool has no tags.
+ */
+export function poolCandidates(snapshot: Snapshot, policy: Policy): SnapshotQuestion[] {
+  const tags = policy.questionPool?.tags?.map((t) => t.toLowerCase());
+  if (!tags?.length) return snapshot.questions;
+  return snapshot.questions.filter((q) => q.tags.some((t) => tags.includes(t.toLowerCase())));
+}
+
+/**
+ * Question order and the maximum score for a new attempt. With a question pool, each
+ * attempt draws `size` questions by its seed (a bank of 100 → 40 per participant).
+ */
 export function planAttempt(snapshot: Snapshot, policy: Policy, seed: number) {
-  const ids = snapshot.questions.map((q) => q.id);
+  let chosen = snapshot.questions;
+  if (policy.questionPool) {
+    const drawn = new Set(
+      sample(poolCandidates(snapshot, policy), policy.questionPool.size, deriveSeed(seed, "pool")),
+    );
+    // Keep the authored order among the drawn questions unless questions are shuffled.
+    chosen = snapshot.questions.filter((q) => drawn.has(q));
+  }
+  const ids = chosen.map((q) => q.id);
   const questionIds = policy.shuffleQuestions ? shuffle(ids, seed) : ids;
-  const maxScore = snapshot.questions.reduce((sum, q) => sum + q.points, 0);
+  const maxScore = chosen.reduce((sum, q) => sum + q.points, 0);
   return { questionIds, maxScore };
 }
 
@@ -36,6 +57,8 @@ export function toPlayQuestion(
   q: SnapshotQuestion,
   attemptSeed: number,
   policy: Policy,
+  /** Exams: send stories node by node, up to this path (see StripContext.storyPath). */
+  storyPath?: readonly string[],
 ): PlayQuestion {
   return {
     id: q.id,
@@ -47,17 +70,21 @@ export function toPlayQuestion(
     data: getDefinition(q.type).stripAnswers(q.config, {
       seed: deriveSeed(attemptSeed, q.id),
       shuffle: policy.shuffleOptions,
+      ...(storyPath && { storyPath }),
     }),
   };
 }
 
-export type Graded = { answer: unknown; result: ScoreResult; points: number };
+/** `result` is null for types graded by hand (essays) until the host grades them. */
+export type Graded = { answer: unknown; result: ScoreResult | null; points: number };
 
 /** Parse and score a raw answer from the client. Null when it doesn't match the type's schema. */
 export function gradeAnswer(q: SnapshotQuestion, raw: unknown): Graded | null {
   const definition = getDefinition(q.type);
   const answer = definition.answerSchema.safeParse(raw);
   if (!answer.success) return null;
+  if (definition.capabilities.manualGrading)
+    return { answer: answer.data, result: null, points: 0 };
   const result = definition.score(q.config, answer.data);
   return { answer: answer.data, result, points: Math.round(q.points * result.ratio) };
 }
@@ -72,7 +99,7 @@ export function storedResult(correct: number | null, total: number | null): Scor
 export function outcomeFor(
   policy: Policy,
   q: SnapshotQuestion,
-  graded: { result: ScoreResult; points: number },
+  graded: { result: ScoreResult | null; points: number },
   progressAfter: Progress,
   reactionPick?: number,
 ): AnswerOutcome | undefined {
@@ -81,10 +108,11 @@ export function outcomeFor(
     result: graded.result,
     points: graded.points,
     ...(policy.showCorrectAnswer && { reveal: { config: q.config, explanation: q.explanation } }),
-    ...(policy.gamification && {
-      progress: progressAfter,
-      reaction: reactionFor(graded.result, progressAfter.streak, reactionPick),
-    }),
+    ...(policy.gamification && { progress: progressAfter }),
+    ...(policy.gamification &&
+      graded.result && {
+        reaction: reactionFor(graded.result, progressAfter.streak, reactionPick),
+      }),
   };
 }
 
@@ -107,9 +135,13 @@ export function answeredState(
     if (response.result) progress = advance(progress, response.result);
     answered[q.id] = {
       answer: response.answer,
-      outcome: response.result
-        ? outcomeFor(policy, q, { result: response.result, points: response.points }, progress, 0)
-        : undefined,
+      outcome: outcomeFor(
+        policy,
+        q,
+        { result: response.result, points: response.points },
+        progress,
+        0,
+      ),
     };
   }
   return { answered, progress };
@@ -176,6 +208,7 @@ export function summarize({
       data: toPlayQuestion(q, seed, policy).data,
       answer: response?.answer ?? null,
       result: response?.result ?? null,
+      ...(response && !response.result && { pending: true }),
       ...(policy.showCorrectAnswer && { reveal: { config: q.config, explanation: q.explanation } }),
     };
   });

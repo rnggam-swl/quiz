@@ -1,9 +1,12 @@
 "use client";
 
+import { ClipboardCheck } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { QuizEditor } from "@/components/editor/QuizEditor";
 import type { EditorAdapter, EditorInitialState } from "@/components/editor/types";
+import { Button } from "@/components/ui/Button";
 import { uploadQuizMedia } from "@/lib/supabase/upload";
 
 import { publishQuizAction, saveQuizDraftAction } from "../../actions";
@@ -24,7 +27,16 @@ export function EditorPage({ initial, ownerId }: { initial: EditorInitialState; 
       initial={initial}
       adapter={adapter}
       backHref="/quizzes"
-      headerActions={<ShareButton quizId={initial.quiz.id} />}
+      headerActions={
+        <>
+          <Button asChild variant="secondary" aria-label="Ujian">
+            <Link href={`/quizzes/${initial.quiz.id}/exams`}>
+              <ClipboardCheck /> <span className="hidden sm:inline">Ujian</span>
+            </Link>
+          </Button>
+          <ShareButton quizId={initial.quiz.id} />
+        </>
+      }
     />
   );
 }

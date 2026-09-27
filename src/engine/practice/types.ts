@@ -37,7 +37,8 @@ export type PlayInfo = {
 export type Reveal = { config: unknown; explanation: string };
 
 export type AnswerOutcome = {
-  result: ScoreResult;
+  /** Null while a hand-graded answer (essay) waits for the host. */
+  result: ScoreResult | null;
   points: number;
   reveal?: Reveal;
   progress?: Progress;
@@ -62,6 +63,8 @@ export type ReviewItem = {
   data: unknown;
   answer: unknown | null;
   result: ScoreResult | null;
+  /** Answered, but waiting for manual grading. */
+  pending?: boolean;
   reveal?: Reveal;
 };
 
@@ -89,6 +92,11 @@ export type PlayError =
   | "deadline_passed"
   | "unauthorized"
   | "no_open_attempt"
+  // Exams (P4)
+  | "passcode"
+  | "not_on_roster"
+  | "login_required"
+  | "not_open_yet"
   | "network";
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; error: PlayError };

@@ -25,8 +25,30 @@ export const policySchema = z.object({
       .optional(),
   }),
   releaseResults: z.enum(["immediately", "after_close", "manual"]),
-  requireLogin: z.boolean(),
+  /**
+   * Who may take part: anyone with the code, signed-in accounts only, or people on the
+   * session roster (they type their NIS/e-mail). Replaces the earlier `requireLogin`.
+   */
+  access: z.enum(["open", "login", "roster"]),
+  /** Extra code the participant must type, on top of the join code. */
+  passcode: z.string().trim().min(1).max(40).optional(),
   allowEmbed: z.boolean(),
+  /** Draw `size` questions per attempt, optionally only those with one of `tags`. */
+  questionPool: z
+    .object({
+      size: z.number().int().min(1).max(500),
+      tags: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
+    })
+    .optional(),
+  /** Exams: may participants go back to earlier questions? */
+  navigation: z.enum(["free", "forward"]),
+  /** With several attempts, which one counts in the report. */
+  attemptScoring: z.enum(["highest", "last", "average"]),
+  integrity: z.object({
+    fullscreen: z.boolean(),
+    logTabSwitch: z.boolean(),
+    blockCopyPaste: z.boolean(),
+  }),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -40,8 +62,11 @@ const PRACTICE: Policy = {
   attempts: 0,
   timer: {},
   releaseResults: "immediately",
-  requireLogin: false,
+  access: "open",
   allowEmbed: true,
+  navigation: "free",
+  attemptScoring: "highest",
+  integrity: { fullscreen: false, logTabSwitch: false, blockCopyPaste: false },
 };
 
 /** Defaults per mode; later phases fill in their own (exam P4, live P5, battle P6–P7). */
@@ -56,8 +81,10 @@ export const DEFAULT_POLICIES: Record<SessionMode, Policy> = {
     attempts: 1,
     timer: { totalS: 3600 },
     releaseResults: "after_close",
-    requireLogin: true,
+    // Anyone with the code by default; the exam form offers roster or login (docs/08).
+    access: "open",
     allowEmbed: false,
+    integrity: { fullscreen: true, logTabSwitch: true, blockCopyPaste: true },
   },
   live: { ...PRACTICE, scoring: "speed", shuffleOptions: false, timer: { perQuestionS: 20 } },
   battle_buzzer: {

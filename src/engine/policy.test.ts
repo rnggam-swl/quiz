@@ -16,6 +16,8 @@ describe("DEFAULT_POLICIES", () => {
       gamification: false,
       attempts: 1,
       allowEmbed: false,
+      navigation: "free",
+      integrity: { fullscreen: true, logTabSwitch: true, blockCopyPaste: true },
     });
   });
 });
@@ -32,5 +34,19 @@ describe("resolvePolicy", () => {
     expect(resolvePolicy("practice", "nope")).toEqual(DEFAULT_POLICIES.practice);
     expect(resolvePolicy("practice", { attempts: -3 })).toEqual(DEFAULT_POLICIES.practice);
     expect(resolvePolicy("exam", null)).toEqual(DEFAULT_POLICIES.exam);
+  });
+});
+
+describe("exam settings", () => {
+  it("accepts a question pool and a passcode, and rejects bad ones", () => {
+    expect(
+      resolvePolicy("exam", { questionPool: { size: 40, tags: ["bab-1"] }, passcode: "IPA8" }),
+    ).toMatchObject({ questionPool: { size: 40, tags: ["bab-1"] }, passcode: "IPA8" });
+    expect(resolvePolicy("exam", { questionPool: { size: 0 } })).toEqual(DEFAULT_POLICIES.exam);
+    expect(resolvePolicy("exam", { passcode: "   " })).toEqual(DEFAULT_POLICIES.exam);
+  });
+
+  it("ignores the retired requireLogin flag", () => {
+    expect(resolvePolicy("exam", { requireLogin: true, access: "roster" }).access).toBe("roster");
   });
 });

@@ -44,9 +44,13 @@ export function WordBlankPlayer({
   const truth = reveal ? wordBlankTokens(reveal.text, reveal.unit) : null;
   const valueAt = (i: number) => (Object.hasOwn(values, String(i)) ? values[String(i)]! : "");
 
+  // Keystrokes can arrive faster than the parent re-renders with the new answer, so merge
+  // into what this player last sent, not into a possibly stale prop.
+  const lastSent = useRef<Record<string, string> | null>(null);
   function setValue(index: number, value: string) {
-    const next = { ...values, [String(index)]: value };
+    const next = { ...(lastSent.current ?? values), [String(index)]: value };
     if (!value) delete next[String(index)];
+    lastSent.current = next;
     onAnswer({ values: next });
   }
 

@@ -1,7 +1,5 @@
 "use server";
 
-import { z } from "zod";
-
 import {
   answeredState,
   gradeAnswer,
@@ -9,11 +7,9 @@ import {
   planAttempt,
   progressInOrder,
   questionsInOrder,
-  storedResult,
   summarize,
   toPlayQuestion,
   withheldSummary,
-  type StoredResponse,
 } from "@/engine/practice/attempt";
 import { nicknameSchema } from "@/engine/practice/nickname";
 import {
@@ -21,47 +17,35 @@ import {
   loadSessionById,
   loadSnapshot,
   verifyEmbedTokenFor,
+  type SessionContext,
 } from "@/engine/practice/server";
-import type {
-  AnswerOutcome,
-  AttemptSummary,
-  AttemptView,
-  PlayError,
-  Result,
-} from "@/engine/practice/types";
+import type { AnswerOutcome, AttemptSummary, AttemptView, Result } from "@/engine/practice/types";
 import { getParticipantTokenSecret } from "@/lib/env.server";
-import { signParticipantToken, verifyParticipantToken } from "@/lib/participant-token";
+import { signParticipantToken } from "@/lib/participant-token";
 import { randomSeed } from "@/lib/seed-random";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json, Tables } from "@/lib/supabase/database.types";
+import type { Json } from "@/lib/supabase/database.types";
 import type { ScoreResult } from "@/questions/types";
+
+import {
+  cleanTimeMs,
+  loadResponses,
+  ownedAttempt,
+  participantFrom,
+  rpcError,
+  uuid,
+} from "./participant";
 
 // These actions are public endpoints: every argument is untrusted. Participants
 // are identified only by a participant token we signed (docs/02-architecture.md).
 
-const uuid = z.uuid();
-
-/** RPC exceptions (supabase/migrations/…_practice_sessions.sql) → player errors. */
-function rpcError(message: string | undefined): PlayError {
-  for (const code of [
-    "session_closed",
-    "attempt_limit",
-    "attempt_closed",
-    "already_answered",
-    "deadline_passed",
-  ] as const) {
-    if (message?.includes(code)) return code;
-  }
-  if (message?.includes("not_found") || message?.includes("unknown_question")) return "not_found";
-  if (message?.includes("invalid_nickname") || message?.includes("nickname_taken"))
-    return "invalid";
-  console.error("practice RPC failed", message);
-  return "network";
-}
-
-function participantFrom(token: unknown) {
-  if (typeof token !== "string") return null;
-  return verifyParticipantToken(getParticipantTokenSecret(), token);
+/**
+ * Practice sessions only. Exams have their own actions (src/app/exam/actions.ts) with
+ * passcode, roster and deadline rules that these must never bypass.
+ */
+async function practiceSession(sessionId: string): Promise<SessionContext | null> {
+  const ctx = await loadSessionById(sessionId);
+  return ctx?.session.mode === "practice" ? ctx : null;
 }
 
 export async function joinSessionAction(
@@ -70,7 +54,7 @@ export async function joinSessionAction(
   embedToken?: string | null,
 ): Promise<Result<{ token: string; nickname: string }>> {
   if (!uuid.safeParse(sessionId).success) return { ok: false, error: "not_found" };
-  const ctx = await loadSessionById(sessionId);
+  const ctx = await practiceSession(sessionId);
   if (!ctx) return { ok: false, error: "not_found" };
   if (!isSessionOpen(ctx)) return { ok: false, error: "session_closed" };
 
@@ -103,40 +87,13 @@ export async function joinSessionAction(
   };
 }
 
-type AttemptRow = Tables<"attempts">;
-
-async function loadResponses(attemptId: string): Promise<Map<string, StoredResponse>> {
-  const { data } = await createAdminClient()
-    .from("responses")
-    .select("question_id, answer, correct, total, points")
-    .eq("attempt_id", attemptId);
-  return new Map(
-    (data ?? []).map((r) => [
-      r.question_id,
-      { answer: r.answer, result: storedResult(r.correct, r.total), points: r.points },
-    ]),
-  );
-}
-
-/** The attempt, only if it belongs to the token's participant. */
-async function ownedAttempt(participantId: string, attemptId: string): Promise<AttemptRow | null> {
-  if (!uuid.safeParse(attemptId).success) return null;
-  const { data } = await createAdminClient()
-    .from("attempts")
-    .select("*")
-    .eq("id", attemptId)
-    .eq("participant_id", participantId)
-    .maybeSingle();
-  return data;
-}
-
 export async function startAttemptAction(
   token: string,
   options?: { resumeOnly?: boolean },
 ): Promise<Result<{ attempt: AttemptView }>> {
   const claims = participantFrom(token);
   if (!claims) return { ok: false, error: "unauthorized" };
-  const ctx = await loadSessionById(claims.sessionId);
+  const ctx = await practiceSession(claims.sessionId);
   if (!ctx) return { ok: false, error: "not_found" };
 
   if (options?.resumeOnly === true) {
@@ -158,6 +115,7 @@ export async function startAttemptAction(
     p_question_ids: plan.questionIds,
     p_max_attempts: ctx.policy.attempts,
     p_duration_s: ctx.policy.timer.totalS,
+    p_max_score: plan.maxScore,
   });
   if (error || !attempt) return { ok: false, error: rpcError(error?.message) };
 
@@ -199,7 +157,7 @@ export async function submitAnswerAction(
   if (attempt.status !== "in_progress") return { ok: false, error: "attempt_closed" };
 
   const [ctx, snapshot] = await Promise.all([
-    loadSessionById(attempt.session_id),
+    practiceSession(attempt.session_id),
     loadSnapshot(attempt.quiz_version_id),
   ]);
   if (!ctx || !snapshot) return { ok: false, error: "not_found" };
@@ -213,10 +171,11 @@ export async function submitAnswerAction(
     p_attempt_id: attempt.id,
     p_question_id: q.id,
     p_answer: graded.answer as Json,
-    p_correct: graded.result.correct,
-    p_total: graded.result.total,
+    // Null = waiting for manual grading; the generated arg types don't allow null.
+    p_correct: graded.result?.correct ?? (null as never),
+    p_total: graded.result?.total ?? (null as never),
     p_points: graded.points,
-    p_time_ms: Number.isFinite(timeMs) ? Math.max(0, Math.min(Math.round(timeMs), 86_400_000)) : 0,
+    p_time_ms: cleanTimeMs(timeMs),
     p_allow_change: ctx.policy.feedback !== "instant",
   });
   if (error) return { ok: false, error: rpcError(error.message) };
@@ -241,7 +200,7 @@ export async function finishAttemptAction(
   if (!attempt) return { ok: false, error: "not_found" };
 
   const [ctx, snapshot, responses] = await Promise.all([
-    loadSessionById(attempt.session_id),
+    practiceSession(attempt.session_id),
     loadSnapshot(attempt.quiz_version_id),
     loadResponses(attempt.id),
   ]);
@@ -266,7 +225,7 @@ export async function finishAttemptAction(
   const canRetry =
     isSessionOpen(ctx) && (ctx.policy.attempts === 0 || done.attempt_no < ctx.policy.attempts);
   const summary = summarize({ ...summaryInput, canRetry });
-  // Results the policy holds back (exams, P4) stay on the server for now.
+  // Results the policy holds back stay on the server.
   if (ctx.policy.releaseResults !== "immediately") {
     return { ok: true, summary: withheldSummary(summary) };
   }

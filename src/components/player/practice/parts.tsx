@@ -169,6 +169,17 @@ export function FeedbackPanel({
   gamification: boolean;
 }) {
   const { result, points, reaction, reveal } = outcome;
+  if (!result) {
+    return (
+      <div role="status" className="flex flex-col gap-1.5 rounded-2xl bg-surface-muted p-4">
+        <p className="flex items-center gap-2 text-lg font-bold text-fg">
+          <Check className="size-6" strokeWidth={3} aria-hidden /> Jawaban tersimpan
+        </p>
+        <p className="text-sm text-fg-muted">Guru akan menilai jawaban ini.</p>
+        {reveal?.explanation && <p className="text-sm text-fg">{reveal.explanation}</p>}
+      </div>
+    );
+  }
   const full = result.ratio === 1;
   const partial = !full && result.ratio > 0;
   return (
@@ -297,13 +308,15 @@ export function SummaryScreen({
 
 function ReviewRow({ item, number }: { item: AttemptSummary["review"][number]; number: number }) {
   const [open, setOpen] = useState(false);
-  const state = !item.result
-    ? "skip"
-    : item.result.ratio === 1
-      ? "ok"
-      : item.result.ratio > 0
-        ? "partial"
-        : "wrong";
+  const state = item.pending
+    ? "pending"
+    : !item.result
+      ? "skip"
+      : item.result.ratio === 1
+        ? "ok"
+        : item.result.ratio > 0
+          ? "partial"
+          : "wrong";
   return (
     <li className="overflow-hidden rounded-xl bg-surface shadow-card">
       <button
@@ -319,9 +332,16 @@ function ReviewRow({ item, number }: { item: AttemptSummary["review"][number]; n
             state === "partial" && "bg-warning",
             state === "wrong" && "bg-danger",
             state === "skip" && "bg-line-strong",
+            state === "pending" && "bg-accent",
           )}
           aria-label={
-            { ok: "benar", partial: "sebagian benar", wrong: "salah", skip: "tidak dijawab" }[state]
+            {
+              ok: "benar",
+              partial: "sebagian benar",
+              wrong: "salah",
+              skip: "tidak dijawab",
+              pending: "menunggu penilaian guru",
+            }[state]
           }
         >
           {number}

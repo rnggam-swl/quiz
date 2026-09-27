@@ -1,4 +1,5 @@
 import { branching } from "./branching/definition";
+import { essay } from "./essay/definition";
 import { grouping } from "./grouping/definition";
 import { hotspot } from "./hotspot/definition";
 import { matching } from "./matching/definition";
@@ -29,6 +30,7 @@ export const questionDefinitions = {
   word_blank: wordBlank,
   hotspot,
   branching,
+  essay,
 } as const satisfies Record<string, AnyQuestionDefinition>;
 
 export type QuestionType = keyof typeof questionDefinitions;
