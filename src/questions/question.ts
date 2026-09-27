@@ -56,16 +56,27 @@ export function changeQuestionType(question: Question, type: QuestionType): Ques
   return { ...question, type, config: getDefinition(type).defaults() };
 }
 
-const ID_KEYS = new Set(["id", "leftId", "rightId"]);
+const ID_KEYS = new Set(["id", "leftId", "rightId", "oddId", "groupId", "startId", "targetId"]);
 
-/** Whether a config holds anything the author typed (text or a non-zero number). */
-export function hasAuthoredContent(value: unknown, key?: string): boolean {
+/**
+ * Whether a config holds anything the author typed. Text and numbers count unless
+ * they equal `baseline` (the type's defaults) at the same path — so a fresh slider
+ * (max 100) or a mode switch ("letter") isn't mistaken for work. Ids never count.
+ */
+export function hasAuthoredContent(value: unknown, baseline?: unknown, key?: string): boolean {
   if (key && ID_KEYS.has(key)) return false;
-  if (typeof value === "string") return value.trim().length > 0;
-  if (typeof value === "number") return value !== 0;
-  if (Array.isArray(value)) return value.some((v) => hasAuthoredContent(v));
+  if (typeof value === "string") return value.trim().length > 0 && value !== baseline;
+  if (typeof value === "number") return value !== (typeof baseline === "number" ? baseline : 0);
+  if (Array.isArray(value)) {
+    const base = Array.isArray(baseline) ? baseline : [];
+    return value.some((v, i) => hasAuthoredContent(v, base[i]));
+  }
   if (value && typeof value === "object") {
-    return Object.entries(value).some(([k, v]) => hasAuthoredContent(v, k));
+    const base = (baseline && typeof baseline === "object" ? baseline : {}) as Record<
+      string,
+      unknown
+    >;
+    return Object.entries(value).some(([k, v]) => hasAuthoredContent(v, base[k], k));
   }
   return false;
 }

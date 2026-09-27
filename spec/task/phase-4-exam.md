@@ -15,6 +15,7 @@
 ## Tipe soal
 
 - [ ] **P4-07** Tipe `essay` (`manualGrading`): editor dengan batas kata dan rubrik, player dengan penghitung kata.
+- [ ] **P4-07b** Cerita Bercabang di ujian (pindahan dari P3-09): kirim node bertahap lewat Server Action `nextStoryNode`, supaya cabang lain tidak terbaca di klien. Graf penuh hanya untuk latihan.
 
 ## Host
 

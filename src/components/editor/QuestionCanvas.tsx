@@ -39,7 +39,6 @@ function AutoTextarea({
 
 export function QuestionCanvas() {
   const { store } = useEditorContext();
-  const quizId = useEditor((s) => s.quiz.id);
   const question = useEditor((s) => s.questions.find((q) => q.id === s.selectedId) ?? null);
   const index = useEditor((s) => s.questions.findIndex((q) => q.id === s.selectedId));
   const showIssues = useEditor((s) => s.showIssues);
@@ -66,7 +65,6 @@ export function QuestionCanvas() {
       key={question.id}
       question={question}
       index={index}
-      quizId={quizId}
       showIssues={showIssues}
       onPatch={(patch) => store.getState().updateQuestion(question.id, patch)}
       onConfig={(config) => store.getState().updateConfig(question.id, config)}
@@ -77,14 +75,12 @@ export function QuestionCanvas() {
 function QuestionForm({
   question,
   index,
-  quizId,
   showIssues,
   onPatch,
   onConfig,
 }: {
   question: Question;
   index: number;
-  quizId: string;
   showIssues: boolean;
   onPatch: (patch: Partial<Pick<Question, "prompt" | "help" | "media">>) => void;
   onConfig: (config: unknown) => void;
@@ -129,7 +125,7 @@ function QuestionForm({
         />
       </div>
 
-      <MediaField quizId={quizId} media={question.media} onChange={(media) => onPatch({ media })} />
+      <MediaField media={question.media} onChange={(media) => onPatch({ media })} />
 
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
         <Editor config={question.config} onChange={onConfig} invalidPaths={invalidPaths} />

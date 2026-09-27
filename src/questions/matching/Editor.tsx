@@ -2,11 +2,12 @@
 
 import { ArrowRight, Plus, Trash2, X } from "lucide-react";
 
+import { ItemMediaButton } from "@/components/editor/ItemMediaButton";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createId } from "@/lib/id";
 
-import type { Item } from "../shared";
+import { withItemMedia, type Item, type MediaRef } from "../shared";
 import type { EditorProps } from "../ui-types";
 import type { MatchingConfig } from "./definition";
 
@@ -22,6 +23,8 @@ export function MatchingEditor({ config, onChange, invalidPaths }: EditorProps<M
 
   const updateItem = (list: Item[], id: string, text: string) =>
     list.map((item) => (item.id === id ? { ...item, text } : item));
+  const updateMedia = (list: Item[], id: string, media: MediaRef | undefined) =>
+    list.map((item) => (item.id === id ? withItemMedia(item, media) : item));
 
   function addLeft() {
     const left = { id: createId(), text: "" };
@@ -74,6 +77,13 @@ export function MatchingEditor({ config, onChange, invalidPaths }: EditorProps<M
         aria-label={placeholder}
         aria-invalid={invalidPaths?.has(`right.${rightIndex.get(right.id)}.text`) || undefined}
       />
+      <ItemMediaButton
+        media={right.media}
+        onChange={(media) =>
+          onChange({ ...config, right: updateMedia(config.right, right.id, media) })
+        }
+        label={placeholder.toLowerCase()}
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -105,19 +115,31 @@ export function MatchingEditor({ config, onChange, invalidPaths }: EditorProps<M
                 key={left.id}
                 className="grid grid-cols-1 gap-2 rounded-lg bg-surface p-2 shadow-card sm:grid-cols-[1fr_20px_1fr_36px] sm:items-start sm:gap-3"
               >
-                <Input
-                  value={left.text}
-                  onChange={(e) =>
-                    onChange({ ...config, left: updateItem(config.left, left.id, e.target.value) })
-                  }
-                  placeholder={`Item ${index + 1}`}
-                  aria-label={`Item ${index + 1}`}
-                  aria-invalid={
-                    invalidPaths?.has(`left.${index}.text`) ||
-                    invalidPaths?.has(`left.${index}`) ||
-                    undefined
-                  }
-                />
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={left.text}
+                    onChange={(e) =>
+                      onChange({
+                        ...config,
+                        left: updateItem(config.left, left.id, e.target.value),
+                      })
+                    }
+                    placeholder={`Item ${index + 1}`}
+                    aria-label={`Item ${index + 1}`}
+                    aria-invalid={
+                      invalidPaths?.has(`left.${index}.text`) ||
+                      invalidPaths?.has(`left.${index}`) ||
+                      undefined
+                    }
+                  />
+                  <ItemMediaButton
+                    media={left.media}
+                    onChange={(media) =>
+                      onChange({ ...config, left: updateMedia(config.left, left.id, media) })
+                    }
+                    label={`item ${index + 1}`}
+                  />
+                </div>
                 <ArrowRight
                   className="hidden size-5 self-center text-fg-subtle sm:block"
                   aria-hidden

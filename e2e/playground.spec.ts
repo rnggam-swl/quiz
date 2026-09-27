@@ -7,7 +7,7 @@ test.skip(!!process.env.CI, "playgrounds only exist in development");
 
 test.describe("practice player (in-memory engine)", () => {
   test("instant feedback: XP, streak, gentle wrong answers and the summary", async ({ page }) => {
-    await page.goto("/playground/play?latency=50");
+    await page.goto("/playground/play?set=core&latency=50");
     await page.getByLabel("Nama panggilan").fill("Budi");
     await page.getByRole("button", { name: "Mulai" }).click();
 
@@ -54,7 +54,7 @@ test.describe("practice player (in-memory engine)", () => {
   });
 
   test("feedback at the end: no per-question feedback, results at the end", async ({ page }) => {
-    await page.goto("/playground/play?feedback=end&latency=50");
+    await page.goto("/playground/play?set=core&feedback=end&latency=50");
     await page.getByLabel("Nama panggilan").fill("Siti");
     await page.getByRole("button", { name: "Mulai" }).click();
 
@@ -62,6 +62,89 @@ test.describe("practice player (in-memory engine)", () => {
     await expect(page.getByRole("heading", { name: /Matahari/ })).toBeVisible();
     await expect(page.getByText("Benar!")).toHaveCount(0);
     await expect(page.getByLabel(/XP/)).toHaveCount(0);
+  });
+
+  test("P3 types: slider, odd one out, sequencing, grouping, blanks, hotspot, story", async ({
+    page,
+  }) => {
+    await page.goto("/playground/play?set=advanced&latency=0");
+    await page.getByLabel("Nama panggilan").fill("Rina");
+    await page.getByRole("button", { name: "Mulai" }).click();
+    const submit = () => page.getByRole("button", { name: "Kirim jawaban" }).click();
+    const next = () => page.getByRole("button", { name: "Lanjut" }).click();
+
+    // Slider: the value only counts once it's moved; 71 ± 3.
+    await expect(page.getByText("Geser untuk menjawab")).toBeVisible();
+    await page.getByLabel("Jawaban", { exact: true }).focus();
+    for (let i = 0; i < 20; i++) await page.keyboard.press("ArrowRight"); // 50 → 70
+    await submit();
+    await expect(page.getByText("Benar!")).toBeVisible();
+    await next();
+
+    // Odd one out answers on tap and shows the reason.
+    await page.getByRole("button", { name: /Bulan/ }).click();
+    await expect(page.getByText("Bulan adalah satelit alami Bumi, bukan planet.")).toBeVisible();
+    await next();
+
+    // Sequencing, with the ▲ buttons: bring each item up to its slot.
+    const order = ["Penguapan", "Kondensasi", "Hujan", "Aliran ke laut"];
+    for (const [slot, name] of order.entries()) {
+      for (;;) {
+        const labels = await page
+          .getByRole("button", { name: /^Naikkan / })
+          .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+        if (labels.indexOf(`Naikkan ${name}`) <= slot) break;
+        await page.getByRole("button", { name: `Naikkan ${name}` }).click();
+      }
+    }
+    await submit();
+    await expect(page.getByText("Benar!")).toBeVisible();
+    await next();
+
+    // Grouping by tapping an item, then its group.
+    for (const [item, group] of [
+      ["Apel", "Buah"],
+      ["Mangga", "Buah"],
+      ["Bayam", "Sayur"],
+      ["Wortel", "Sayur"],
+    ]) {
+      await page.getByRole("button", { name: item, exact: true }).click();
+      await page.getByRole("button", { name: `Masukkan ke ${group}` }).click();
+    }
+    await submit();
+    await expect(page.getByText("Benar!")).toBeVisible();
+    await next();
+
+    // Letter boxes advance on their own; one letter wrong on purpose. Enter submits.
+    await page.getByLabel("Huruf kosong 1").pressSequentially("ostx");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Sebagian benar (3/4)")).toBeVisible();
+    await next();
+
+    // Hotspot with the keyboard crosshair (starts in the middle, 3% per arrow press).
+    await page.getByRole("group", { name: /Tiga bentuk berwarna/ }).focus();
+    for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Enter");
+    for (let i = 0; i < 15; i++) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("2/2 klik")).toBeVisible();
+    await submit();
+    await expect(page.getByText("Benar!")).toBeVisible();
+    await next();
+
+    // Branching story: a step back is allowed before the ending is submitted.
+    await page.getByRole("button", { name: /Ambil dan kembalikan/ }).click();
+    await page.getByRole("button", { name: /Simpan sampai besok/ }).click();
+    await expect(page.getByText("Akhir cukup baik")).toBeVisible();
+    await page.getByRole("button", { name: "Mundur" }).click();
+    await page.getByRole("button", { name: /Titipkan ke guru piket/ }).click();
+    await submit();
+    await expect(page.getByText("Akhir ini bernilai 100%.")).toBeVisible();
+    await page.getByRole("button", { name: "Lihat hasil" }).click();
+
+    await expect(page.getByRole("heading", { name: "Selesai! 🎉" })).toBeVisible();
+    await expect(page.getByText("6 dari 7 benar")).toBeVisible();
   });
 
   test("rude nicknames are refused", async ({ page }) => {

@@ -19,6 +19,7 @@ import { scoreBand, type Progress } from "@/engine/practice/gamification";
 import { NICKNAME_MAX } from "@/engine/practice/nickname";
 import type { AnswerOutcome, AttemptSummary, PlayInfo } from "@/engine/practice/types";
 import { cn } from "@/lib/cn";
+import { formatResult } from "@/lib/format";
 import { isMuted, setMuted } from "@/lib/sound";
 
 export function NicknameForm({
@@ -198,11 +199,7 @@ export function FeedbackPanel({
           <X className="size-6" strokeWidth={3} aria-hidden />
         )}
         <span>
-          {full
-            ? "Benar!"
-            : partial
-              ? `Sebagian benar (${result.correct}/${result.total})`
-              : "Belum tepat"}
+          {full ? "Benar!" : partial ? `Sebagian benar (${formatResult(result)})` : "Belum tepat"}
           {gamification && reaction && (
             <span className="ml-2 font-semibold">{reaction.message}</span>
           )}
@@ -332,7 +329,7 @@ function ReviewRow({ item, number }: { item: AttemptSummary["review"][number]; n
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.prompt || "Soal"}</span>
         {item.result && (
           <span className="text-xs font-semibold text-fg-muted tabular-nums">
-            {item.result.correct}/{item.result.total}
+            {formatResult(item.result)}
           </span>
         )}
         <ChevronDown

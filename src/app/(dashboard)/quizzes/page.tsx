@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { requireHost } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { escapeLike, timeAgo } from "@/lib/format";
-import { themeStyle, type QuizTheme } from "@/lib/theme";
+import { themeScheme, themeStyle, type QuizTheme } from "@/lib/theme";
 import { createClient } from "@/lib/supabase/server";
 
 import { createQuizAction } from "./actions";
@@ -102,6 +102,7 @@ export default async function QuizzesPage({ searchParams }: PageProps<"/quizzes"
                     <div
                       className="flex aspect-[16/7] items-center justify-center bg-theme-bg"
                       style={themeStyle(quiz.theme as QuizTheme)}
+                      data-scheme={themeScheme(quiz.theme as QuizTheme)}
                     >
                       {quiz.cover_url ? (
                         // eslint-disable-next-line @next/next/no-img-element -- user upload from Storage

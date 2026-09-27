@@ -18,7 +18,8 @@ export function DropdownMenuContent({
       <Menu.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-56 rounded-xl border border-line bg-surface p-1 text-fg shadow-pop data-[state=open]:animate-fade-up",
+          // Long menus (the question types) scroll instead of running off short screens.
+          "z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-56 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-fg shadow-pop data-[state=open]:animate-fade-up",
           className,
         )}
         {...props}

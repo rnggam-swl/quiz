@@ -50,6 +50,10 @@ export const matching: QuestionDefinition<MatchingConfig, MatchingAnswer, Matchi
   answerSchema,
   capabilities: {
     modes: { practice: "ok", exam: "ok", live: "ok" },
+    notes: {
+      battle_buzzer: "Memasangkan banyak item terlalu lama untuk rebutan.",
+      battle_royale: "Memasangkan banyak item terlalu lama untuk royale.",
+    },
     avgSeconds: 45,
     partialCredit: true,
   },

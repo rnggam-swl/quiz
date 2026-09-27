@@ -4,6 +4,7 @@ import { Check, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 
 import { AnswerShape, type AnswerSlot } from "@/components/player/AnswerShape";
+import { ItemContent } from "@/components/player/ItemContent";
 import { cn } from "@/lib/cn";
 
 import type { PlayerProps } from "../ui-types";
@@ -72,7 +73,7 @@ export function MatchingPlayer({
                   )}
                 >
                   <AnswerShape slot={slotOf(i)} className="size-7 shrink-0 rounded-md p-1.5" />
-                  <span className="min-w-0 flex-1 break-words">{left.text || `Item ${i + 1}`}</span>
+                  <ItemContent item={left} fallback={`Item ${i + 1}`} imageClassName="sm:size-14" />
                   {count > 0 && (
                     <span className="rounded-full bg-surface-muted px-2 text-xs text-fg-muted">
                       {count}
@@ -100,9 +101,11 @@ export function MatchingPlayer({
                     !active && !locked && "cursor-default",
                   )}
                 >
-                  <span className="min-w-0 flex-1 break-words">
-                    {right.text || `Pasangan ${i + 1}`}
-                  </span>
+                  <ItemContent
+                    item={right}
+                    fallback={`Pasangan ${i + 1}`}
+                    imageClassName="sm:size-14"
+                  />
                   <span className="flex gap-1">
                     {connected.map((p) => (
                       <span key={p.leftId} className="relative">

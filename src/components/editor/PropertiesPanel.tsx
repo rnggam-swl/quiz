@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ImagePlus, LoaderCircle, X } from "lucide-react";
+import { Check, CircleAlert, ImagePlus, LoaderCircle, Minus, X } from "lucide-react";
 import { Tabs } from "radix-ui";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { readableTextColor } from "@/lib/color";
 import { checkMediaFile, MEDIA_RULES } from "@/lib/media";
 import { THEME_PRESETS } from "@/lib/theme";
+import { MODE_LABELS, modeNote, modeSupport } from "@/questions/modes";
 import { hasAuthoredContent, type Question } from "@/questions/question";
 import {
   isQuestionType,
@@ -20,6 +21,7 @@ import {
   questionDefinitions,
   type QuestionType,
 } from "@/questions/registry";
+import { SESSION_MODES } from "@/questions/types";
 
 import { useEditor, useEditorContext } from "./EditorContext";
 
@@ -75,6 +77,54 @@ function Field({
   );
 }
 
+/** Where this type can be used (docs/04 capability matrix), with the reason for any caveat. */
+function ModeCompatibility({ type }: { type: QuestionType }) {
+  const notes = SESSION_MODES.flatMap((mode) => {
+    const note = modeNote(type, mode);
+    return note && modeSupport(type, mode) !== "ok" ? [{ mode, note }] : [];
+  });
+  return (
+    <div className="flex flex-col gap-1.5">
+      <ul className="flex flex-wrap gap-1.5" aria-label="Bisa dipakai di mode">
+        {SESSION_MODES.map((mode) => {
+          const support = modeSupport(type, mode);
+          const Icon = support === "ok" ? Check : support === "warn" ? CircleAlert : Minus;
+          return (
+            <li
+              key={mode}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                support === "ok" && "bg-success-soft text-success",
+                support === "warn" && "bg-warning-soft text-warning",
+                support === "no" && "bg-surface-muted text-fg-muted line-through",
+              )}
+            >
+              <Icon className="size-3" strokeWidth={3} aria-hidden />
+              {MODE_LABELS[mode]}
+              <span className="sr-only">
+                {support === "ok"
+                  ? ": bisa"
+                  : support === "warn"
+                    ? ": bisa, dengan catatan"
+                    : ": tidak bisa"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {notes.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
+          {notes.map(({ mode, note }) => (
+            <li key={mode}>
+              <span className="font-medium">{MODE_LABELS[mode]}:</span> {note}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function QuestionProperties() {
   const { store } = useEditorContext();
   const question = useEditor((s) => s.questions.find((q) => q.id === s.selectedId) ?? null);
@@ -88,7 +138,8 @@ function QuestionProperties() {
 
   function requestType(type: QuestionType) {
     if (!question || type === question.type) return;
-    if (hasAuthoredContent(question.config)) setPendingType(type);
+    const defaults = questionDefinitions[question.type].defaults();
+    if (hasAuthoredContent(question.config, defaults)) setPendingType(type);
     else store.getState().changeType(question.id, type);
   }
 
@@ -106,6 +157,7 @@ function QuestionProperties() {
             </option>
           ))}
         </Select>
+        <ModeCompatibility type={question.type} />
       </Field>
 
       <Field label="Batas waktu" htmlFor="prop-time" hint="Dipakai di mode live dan battle.">
