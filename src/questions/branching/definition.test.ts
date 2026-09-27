@@ -144,6 +144,26 @@ describe("branching.stripAnswers", () => {
     ]);
   });
 
+  it("sends only the nodes along a valid path when incremental (exams)", () => {
+    const start = branching.stripAnswers(story, { seed: 1, shuffle: false, storyPath: [] });
+    expect(start.incremental).toBe(true);
+    expect(start.nodes.map((n) => n.id)).toEqual(["start"]);
+    // Its choices still say where they lead, so the player can ask for the next node.
+    expect(start.nodes[0]!.choices.map((c) => c.targetId)).toEqual(["mid", "lose"]);
+
+    const deeper = branching.stripAnswers(story, {
+      seed: 1,
+      shuffle: false,
+      storyPath: ["a", "c"],
+    });
+    expect(deeper.nodes.map((n) => n.id)).toEqual(["start", "mid", "win"]);
+    expect(JSON.stringify(deeper)).not.toContain("Gagal");
+
+    // A forged path reveals nothing beyond the start.
+    const forged = branching.stripAnswers(story, { seed: 1, shuffle: false, storyPath: ["c"] });
+    expect(forged.nodes.map((n) => n.id)).toEqual(["start"]);
+  });
+
   it("leaves out unconnected choices so the player can't get stuck", () => {
     const loose = {
       ...story,

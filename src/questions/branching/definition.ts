@@ -66,7 +66,12 @@ export type PublicStoryNode = {
   ending: { label: string } | null;
   choices: { id: string; text: string; targetId: string }[];
 };
-export type BranchingPublic = { startId: string; nodes: PublicStoryNode[] };
+export type BranchingPublic = {
+  startId: string;
+  nodes: PublicStoryNode[];
+  /** Only some nodes are here; the player asks the server for the next one (exams). */
+  incremental?: boolean;
+};
 
 /** Anything shaped like a story graph: the full config or the participant's public copy. */
 type Walkable = {
@@ -99,6 +104,15 @@ export function walkStory<S extends Walkable>(
     node = next;
   }
   return { end: node, taken };
+}
+
+/** Node ids along `path` from the start (just the start node when the path is invalid). */
+function visitedNodes(config: BranchingConfig, path: readonly string[]): Set<string> {
+  const ids = new Set([config.startId]);
+  for (const choice of walkStory(config, path)?.taken ?? []) {
+    if (choice.targetId) ids.add(choice.targetId);
+  }
+  return ids;
 }
 
 /** An ending's name, else the start of its text, else "Node 3" — for messages. */
@@ -288,24 +302,29 @@ export const branching: QuestionDefinition<BranchingConfig, BranchingAnswer, Bra
     return scoreResult(correct, Math.max(1, unique.size));
   },
 
-  stripAnswers(config, { seed, shuffle: doShuffle }) {
+  stripAnswers(config, { seed, shuffle: doShuffle, storyPath }) {
     const ids = new Set(config.nodes.map((n) => n.id));
+    // Incremental: the start node plus every node the (valid) path passes through.
+    const shown = storyPath && visitedNodes(config, storyPath);
     return {
       startId: config.startId,
-      nodes: config.nodes.map((node): PublicStoryNode => {
-        const choices = node.ending
-          ? []
-          : node.choices
-              .filter((c) => c.targetId && ids.has(c.targetId))
-              .map((c) => ({ id: c.id, text: c.text, targetId: c.targetId! }));
-        return {
-          id: node.id,
-          text: node.text,
-          ...(node.media && { media: node.media }),
-          ending: node.ending ? { label: node.ending.label } : null,
-          choices: doShuffle ? shuffle(choices, deriveSeed(seed, node.id)) : choices,
-        };
-      }),
+      ...(storyPath && { incremental: true }),
+      nodes: config.nodes
+        .filter((node) => !shown || shown.has(node.id))
+        .map((node): PublicStoryNode => {
+          const choices = node.ending
+            ? []
+            : node.choices
+                .filter((c) => c.targetId && ids.has(c.targetId))
+                .map((c) => ({ id: c.id, text: c.text, targetId: c.targetId! }));
+          return {
+            id: node.id,
+            text: node.text,
+            ...(node.media && { media: node.media }),
+            ending: node.ending ? { label: node.ending.label } : null,
+            choices: doShuffle ? shuffle(choices, deriveSeed(seed, node.id)) : choices,
+          };
+        }),
     };
   },
 

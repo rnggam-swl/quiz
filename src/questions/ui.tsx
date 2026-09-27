@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Boxes,
+  FileText,
   GitBranch,
   Hash,
   ListChecks,
@@ -15,6 +16,8 @@ import {
 
 import { BranchingEditor } from "./branching/Editor";
 import { BranchingPlayer } from "./branching/Player";
+import { EssayEditor } from "./essay/Editor";
+import { EssayPlayer } from "./essay/Player";
 import { GroupingEditor } from "./grouping/Editor";
 import { GroupingPlayer } from "./grouping/Player";
 import { HotspotEditor } from "./hotspot/Editor";
@@ -78,4 +81,5 @@ export const questionUI: UIRegistry = {
   word_blank: { Icon: WholeWord, Editor: WordBlankEditor, Player: WordBlankPlayer },
   hotspot: { Icon: MousePointerClick, Editor: HotspotEditor, Player: HotspotPlayer },
   branching: { Icon: GitBranch, Editor: BranchingEditor, Player: BranchingPlayer },
+  essay: { Icon: FileText, Editor: EssayEditor, Player: EssayPlayer },
 };

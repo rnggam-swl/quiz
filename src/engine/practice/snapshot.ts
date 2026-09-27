@@ -18,6 +18,8 @@ export type SnapshotQuestion = {
   points: number;
   explanation: string;
   timeLimitS: number | null;
+  /** For question pools (exam bank filters). */
+  tags: string[];
 };
 
 export type SnapshotQuiz = {
@@ -50,6 +52,7 @@ const rawSnapshotSchema = z.object({
       time_limit_s: z.number().nullable().catch(null),
       points: z.number().catch(1000),
       explanation: z.string().catch(""),
+      tags: z.array(z.string()).catch([]),
     }),
   ),
 });
@@ -85,6 +88,7 @@ export function parseSnapshot(raw: unknown): Snapshot | null {
           points: q.points,
           explanation: q.explanation,
           timeLimitS: q.time_limit_s,
+          tags: q.tags,
         }),
       )
       .filter((q): q is SnapshotQuestion => q !== null),
@@ -113,6 +117,7 @@ export function snapshotFromDraft(quiz: QuizDraft, questions: Question[]): Snaps
           points: q.points,
           explanation: q.explanation,
           timeLimitS: q.timeLimitS,
+          tags: q.tags,
         }),
       )
       .filter((q): q is SnapshotQuestion => q !== null),

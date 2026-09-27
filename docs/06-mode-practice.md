@@ -14,7 +14,7 @@ Peserta mengerjakan quiz sendiri, kapan saja, lewat link, kode, atau embed. Mode
   shuffleQuestions: false,
   shuffleOptions: true,
   releaseResults: 'immediately',
-  requireLogin: false,
+  access: 'open',               // siapa pun dengan kode/link
   allowEmbed: true,
   timer: {},                    // opsional per soal
 }

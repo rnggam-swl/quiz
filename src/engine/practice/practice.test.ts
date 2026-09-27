@@ -56,7 +56,7 @@ const rawSnapshot = {
       points: 500,
       explanation: "",
     },
-    { id: crypto.randomUUID(), type: "essay", prompt: "?", config: {}, points: 1000 },
+    { id: crypto.randomUUID(), type: "puzzle", prompt: "?", config: {}, points: 1000 },
     { id: crypto.randomUUID(), type: "true_false", prompt: "rusak", config: { correct: "ya" } },
   ],
 };
@@ -137,6 +137,34 @@ describe("attempt planning & grading", () => {
       ),
     );
     expect(shuffled.size).toBe(2);
+  });
+
+  it("draws a question pool by seed, optionally filtered by tags", () => {
+    const bank: Snapshot = {
+      quiz: snapshot.quiz,
+      questions: Array.from({ length: 10 }, (_, i) => ({
+        ...snapshot.questions[1]!,
+        id: `q${i}`,
+        points: 100,
+        tags: i < 4 ? ["Bab-1"] : ["bab-2"],
+      })),
+    };
+    const pooled = { ...practice, questionPool: { size: 3 } };
+    const a = planAttempt(bank, pooled, 7);
+    expect(a.questionIds).toHaveLength(3);
+    expect(a.maxScore).toBe(300);
+    // Same seed, same draw; the drawn questions keep the authored order.
+    expect(planAttempt(bank, pooled, 7)).toEqual(a);
+    expect([...a.questionIds].sort((x, y) => Number(x.slice(1)) - Number(y.slice(1)))).toEqual(
+      a.questionIds,
+    );
+    const draws = new Set(
+      Array.from({ length: 30 }, (_, s) => planAttempt(bank, pooled, s).questionIds.join()),
+    );
+    expect(draws.size).toBeGreaterThan(5);
+
+    const bab1 = { ...practice, questionPool: { size: 10, tags: ["bab-1"] } };
+    expect(planAttempt(bank, bab1, 1).questionIds).toEqual(["q0", "q1", "q2", "q3"]);
   });
 
   it("strips the answer key from play questions", () => {

@@ -92,7 +92,7 @@ describe("rowToQuestion / toDraftPayload", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const row = {
       id: crypto.randomUUID(),
-      type: "essay",
+      type: "puzzle",
       prompt: "",
       help: "",
       media: [],

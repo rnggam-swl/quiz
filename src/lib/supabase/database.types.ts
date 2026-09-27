@@ -90,6 +90,38 @@ export type Database = {
           },
         ]
       }
+      integrity_events: {
+        Row: {
+          at: string
+          attempt_id: string
+          id: number
+          kind: string
+          meta: Json
+        }
+        Insert: {
+          at?: string
+          attempt_id: string
+          id?: never
+          kind: string
+          meta?: Json
+        }
+        Update: {
+          at?: string
+          attempt_id?: string
+          id?: never
+          kind?: string
+          meta?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrity_events_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           external_id: string | null
@@ -97,6 +129,7 @@ export type Database = {
           joined_at: string
           last_seen_at: string | null
           nickname: string
+          roster_id: string | null
           session_id: string
           user_id: string | null
         }
@@ -106,6 +139,7 @@ export type Database = {
           joined_at?: string
           last_seen_at?: string | null
           nickname: string
+          roster_id?: string | null
           session_id: string
           user_id?: string | null
         }
@@ -115,10 +149,18 @@ export type Database = {
           joined_at?: string
           last_seen_at?: string | null
           nickname?: string
+          roster_id?: string | null
           session_id?: string
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "participants_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "session_roster"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "participants_session_id_fkey"
             columns: ["session_id"]
@@ -331,9 +373,13 @@ export type Database = {
           answered_at: string
           attempt_id: string
           correct: number | null
+          feedback: string | null
+          graded_at: string | null
+          graded_by: string | null
           id: string
           points: number
           question_id: string
+          rubric_scores: Json | null
           time_ms: number | null
           total: number | null
         }
@@ -342,9 +388,13 @@ export type Database = {
           answered_at?: string
           attempt_id: string
           correct?: number | null
+          feedback?: string | null
+          graded_at?: string | null
+          graded_by?: string | null
           id?: string
           points?: number
           question_id: string
+          rubric_scores?: Json | null
           time_ms?: number | null
           total?: number | null
         }
@@ -353,9 +403,13 @@ export type Database = {
           answered_at?: string
           attempt_id?: string
           correct?: number | null
+          feedback?: string | null
+          graded_at?: string | null
+          graded_by?: string | null
           id?: string
           points?: number
           question_id?: string
+          rubric_scores?: Json | null
           time_ms?: number | null
           total?: number | null
         }
@@ -365,6 +419,48 @@ export type Database = {
             columns: ["attempt_id"]
             isOneToOne: false
             referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "responses_graded_by_fkey"
+            columns: ["graded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_roster: {
+        Row: {
+          created_at: string
+          extra_time_pct: number
+          id: string
+          identifier: string
+          name: string
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          extra_time_pct?: number
+          id?: string
+          identifier: string
+          name: string
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          extra_time_pct?: number
+          id?: string
+          identifier?: string
+          name?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_roster_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -382,7 +478,9 @@ export type Database = {
           policy: Json
           quiz_id: string
           quiz_version_id: string | null
+          results_released_at: string | null
           status: Database["public"]["Enums"]["session_status"]
+          title: string | null
           updated_at: string
         }
         Insert: {
@@ -397,7 +495,9 @@ export type Database = {
           policy?: Json
           quiz_id: string
           quiz_version_id?: string | null
+          results_released_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
+          title?: string | null
           updated_at?: string
         }
         Update: {
@@ -412,7 +512,9 @@ export type Database = {
           policy?: Json
           quiz_id?: string
           quiz_version_id?: string | null
+          results_released_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
+          title?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -458,7 +560,9 @@ export type Database = {
           policy: Json
           quiz_id: string
           quiz_version_id: string | null
+          results_released_at: string | null
           status: Database["public"]["Enums"]["session_status"]
+          title: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -468,7 +572,114 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      end_exam: {
+        Args: { p_session_id: string }
+        Returns: {
+          closes_at: string | null
+          code: string | null
+          created_at: string
+          host_id: string
+          id: string
+          is_default: boolean
+          mode: Database["public"]["Enums"]["session_mode"]
+          opens_at: string | null
+          policy: Json
+          quiz_id: string
+          quiz_version_id: string | null
+          results_released_at: string | null
+          status: Database["public"]["Enums"]["session_status"]
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      expire_attempts: { Args: never; Returns: number }
+      extend_attempt: {
+        Args: { p_attempt_id: string; p_minutes: number }
+        Returns: {
+          attempt_no: number
+          deadline: string | null
+          id: string
+          max_score: number | null
+          max_streak: number | null
+          participant_id: string
+          question_ids: string[]
+          quiz_version_id: string
+          score: number | null
+          seed: number
+          session_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["attempt_status"]
+          submitted_at: string | null
+          xp: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attempts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       generate_session_code: { Args: never; Returns: string }
+      grade_response: {
+        Args: {
+          p_feedback?: string
+          p_ratio: number
+          p_response_id: string
+          p_rubric?: Json
+        }
+        Returns: {
+          answer: Json
+          answered_at: string
+          attempt_id: string
+          correct: number | null
+          feedback: string | null
+          graded_at: string | null
+          graded_by: string | null
+          id: string
+          points: number
+          question_id: string
+          rubric_scores: Json | null
+          time_ms: number | null
+          total: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "responses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      host_owns_attempt: { Args: { p_attempt_id: string }; Returns: boolean }
+      join_exam: {
+        Args: {
+          p_identifier?: string
+          p_nickname: string
+          p_session_id: string
+          p_user_id?: string
+        }
+        Returns: {
+          external_id: string | null
+          id: string
+          joined_at: string
+          last_seen_at: string | null
+          nickname: string
+          roster_id: string | null
+          session_id: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "participants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       join_session: {
         Args: {
           p_external_id?: string
@@ -481,6 +692,7 @@ export type Database = {
           joined_at: string
           last_seen_at: string | null
           nickname: string
+          roster_id: string | null
           session_id: string
           user_id: string | null
         }
@@ -490,6 +702,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      log_integrity_events: {
+        Args: { p_attempt_id: string; p_events: Json }
+        Returns: number
       }
       owns_quiz: { Args: { p_quiz_id: string }; Returns: boolean }
       owns_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -516,9 +732,13 @@ export type Database = {
           answered_at: string
           attempt_id: string
           correct: number | null
+          feedback: string | null
+          graded_at: string | null
+          graded_by: string | null
           id: string
           points: number
           question_id: string
+          rubric_scores: Json | null
           time_ms: number | null
           total: number | null
         }
@@ -529,6 +749,33 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reopen_attempt: {
+        Args: { p_attempt_id: string; p_minutes: number }
+        Returns: {
+          attempt_no: number
+          deadline: string | null
+          id: string
+          max_score: number | null
+          max_streak: number | null
+          participant_id: string
+          question_ids: string[]
+          quiz_version_id: string
+          score: number | null
+          seed: number
+          session_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["attempt_status"]
+          submitted_at: string | null
+          xp: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attempts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reset_attempt: { Args: { p_attempt_id: string }; Returns: undefined }
       save_quiz_draft: {
         Args: {
           p_base_revision: number
@@ -542,6 +789,7 @@ export type Database = {
         Args: {
           p_duration_s?: number
           p_max_attempts: number
+          p_max_score?: number
           p_participant_id: string
           p_question_ids: string[]
           p_quiz_version_id: string

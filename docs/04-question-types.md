@@ -26,7 +26,7 @@ Matriks ini ada di kode sebagai `capabilities.modes` tiap tipe, dan alasannya di
 
 - Panel properti menampilkan chip mode (✓ / ⚠️ / coret) di bawah pilihan tipe, lengkap dengan alasannya.
 - Menu "Tambah soal" menulis "Tidak untuk: Rebutan, Royale" di bawah tipe yang terbatas. Menu ini juga bisa difilter per mode (`mode` di `AddQuestionMenu`, dari `typesForMode()`), untuk quiz yang dibuat khusus satu mode (P4+).
-- Saat membuat sesi ujian/live/battle, soal yang tidak kompatibel dilaporkan dan bisa dilewati (P4–P7).
+- Saat membuat sesi ujian/live/battle, soal yang tidak kompatibel dilaporkan (form "Buat ujian" sudah menampilkannya, P4) dan bisa dilewati (P5–P7).
 
 ## Konvensi umum
 
@@ -189,18 +189,35 @@ answer: { path: string[] /*choiceId berurutan*/ }
 - Prototipe menilai `pilihan benar / pilihan yang diambil`, sehingga jalur buruk yang pendek bisa bernilai setara dengan jalur baik yang panjang. Default sekarang **`ending`**: nilai = `ending.score` dari akhir yang dicapai. `choices` tetap tersedia, dan setiap pilihan hanya dihitung sekali supaya berputar di pilihan benar tidak menaikkan nilai.
 - Server menelusuri ulang `path` dari node awal (`walkStory()`). Jalur yang tidak sah atau belum sampai akhir bernilai 0.
 - **Validasi** (diambil dari prototipe, ditambah satu): node awal ada dan bukan akhir cerita, minimal satu akhir, tidak ada jalan buntu, tidak ada pilihan tanpa tujuan, semua node bisa dijangkau, dan **dari setiap node cerita masih bisa sampai ke akhir** (tidak terjebak di putaran). Mode `ending` butuh minimal satu akhir bernilai > 0, dan mode `choices` butuh minimal satu pilihan benar.
-- **Strip:** hapus `correct`, `ending.score`, dan posisi kanvas. Pilihan tanpa tujuan tidak dikirim. Untuk latihan seluruh graf dikirim; di ujian node dikirim bertahap (P4-07b).
+- **Strip:** hapus `correct`, `ending.score`, dan posisi kanvas. Pilihan tanpa tujuan tidak dikirim. Untuk latihan seluruh graf dikirim. Di ujian node dikirim bertahap (P4-07b): `stripAnswers` dengan `storyPath` hanya menyertakan node awal dan node di sepanjang jalur itu, dan player meminta node berikutnya lewat `storyStepAction` (jalur divalidasi dengan `walkStory`).
 - **Editor:** flowchart React Flow (dimuat terpisah dari player) dengan node yang bisa digeser, seret titik pilihan ke node mana pun untuk menyambung, garis bezier, penanda awal dan akhir, serta mode layar penuh. Semua hal juga bisa dilakukan lewat formulir di bawah kanvas (pilih tujuan, "+ Node baru"), jadi editor tetap bisa dipakai dengan keyboard.
 - **Player:** node satu per satu, dengan tombol **Mundur** dan **Dari awal** sebelum dikirim. Jawaban baru tercatat setelah sampai di akhir cerita. Reveal menampilkan jejak pilihan dan nilai akhir.
 
 ## Esai — `essay`
 
 ```ts
-config: { minWords?: number; maxWords?: number; rubric?: { criterion: string; points: number }[] }
-answer: { text: string }
+config: {
+  minWords: number | null;
+  maxWords: number | null;
+  rubric: {
+    id: string;
+    criterion: string;
+    points: number;
+  }
+  [];
+  guide: string;
+}
+answer: {
+  text: string;
+} // maks. 20.000 karakter
 ```
 
-- `capabilities.manualGrading = true`. `responses.correct` bernilai `null` sampai guru menilai.
+- `capabilities.manualGrading = true`. `score()` selalu 0/0; server menyimpan `responses.correct = null` (menunggu penilaian) dan peserta melihat "Guru akan menilai jawaban ini".
+- **Rubrik:** maks. 10 kriteria, masing-masing 1–100 poin. Guru memilih 0..poin per kriteria; rasio = Σ skor / Σ poin (`rubricRatio`), lalu `grade_response` menghitung poin soal = `round(points × rasio)`. Tanpa rubrik, guru memberi persentase.
+- `guide` (panduan atau contoh jawaban) hanya untuk guru, dan tampil ke peserta saat review jika kunci jawaban ditampilkan.
+- **Validasi:** `minWords ≤ maxWords`, kriteria rubrik tidak kosong.
+- **Strip:** hanya `minWords` dan `maxWords`. Rubrik dan panduan tidak pernah dikirim ke peserta.
+- **Player:** textarea dengan penghitung kata (peringatan di luar batas, tetapi tetap bisa dikirim). **Penilaian:** antrean per soal di `/quizzes/[id]/exams/[examId]/grading`.
 
 ---
 

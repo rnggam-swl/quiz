@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Flag, RotateCcw, Undo2, X } from "lucide-react";
-import { useState } from "react";
+import { Check, Flag, LoaderCircle, RotateCcw, Undo2, X } from "lucide-react";
+import { useContext, useState } from "react";
 
 import type { AnswerSlot } from "@/components/player/AnswerShape";
 import { AnswerTile } from "@/components/player/AnswerTile";
@@ -14,7 +14,15 @@ import {
   type BranchingAnswer,
   type BranchingConfig,
   type BranchingPublic,
+  type PublicStoryNode,
 } from "./definition";
+import { StoryLoaderContext } from "./story-loader";
+
+/** `known` plus any nodes it doesn't have yet. */
+function withNodes(known: PublicStoryNode[], more: PublicStoryNode[]): PublicStoryNode[] {
+  const ids = new Set(known.map((n) => n.id));
+  return [...known, ...more.filter((n) => !ids.has(n.id))];
+}
 
 function NodeMedia({ media }: { media: MediaRef }) {
   return media.kind === "image" ? (
@@ -41,18 +49,33 @@ export function BranchingPlayer({
   disabled,
   reveal,
 }: PlayerProps<BranchingPublic, BranchingAnswer, BranchingConfig>) {
+  const loadNodes = useContext(StoryLoaderContext);
   const [path, setPath] = useState<string[]>(() => answer?.path ?? []);
-  const locked = disabled || !!reveal;
-  const walk = walkStory(data, path) ?? walkStory(data, []);
+  // Nodes fetched so far when the story arrives node by node (exams).
+  const [fetched, setFetched] = useState<PublicStoryNode[]>([]);
+  const [loading, setLoading] = useState(false);
+  const locked = disabled || !!reveal || loading;
+  const story = { ...data, nodes: withNodes(data.nodes, fetched) };
+  const walk = walkStory(story, path) ?? walkStory(story, []);
 
   if (!walk) return <p className="text-sm text-fg-subtle italic">Cerita belum punya node awal.</p>;
   const node = walk.end;
 
-  function go(next: string[]) {
+  async function go(next: string[]) {
+    let nodes = story.nodes;
+    if (!walkStory({ ...story, nodes }, next) && data.incremental && loadNodes) {
+      setLoading(true);
+      const more = await loadNodes(next);
+      setLoading(false);
+      if (!more) return;
+      nodes = withNodes(nodes, more);
+      setFetched((f) => withNodes(f, more));
+    }
+    const reached = walkStory({ ...story, nodes }, next);
+    if (!reached) return;
     setPath(next);
-    const reached = walkStory(data, next);
     // Only a path that ends the story is an answer; anything shorter clears it.
-    onAnswer({ path: reached?.end.ending ? next : [] });
+    onAnswer({ path: reached.end.ending ? next : [] });
   }
 
   const fullNode = reveal?.nodes.find((n) => n.id === node.id);
@@ -68,14 +91,14 @@ export function BranchingPlayer({
             <span className="flex gap-3">
               <button
                 type="button"
-                onClick={() => go(path.slice(0, -1))}
+                onClick={() => void go(path.slice(0, -1))}
                 className="inline-flex items-center gap-1 hover:text-fg"
               >
                 <Undo2 className="size-4" /> Mundur
               </button>
               <button
                 type="button"
-                onClick={() => go([])}
+                onClick={() => void go([])}
                 className="inline-flex items-center gap-1 hover:text-fg"
               >
                 <RotateCcw className="size-4" /> Dari awal
@@ -144,7 +167,7 @@ export function BranchingPlayer({
               key={choice.id}
               slot={((index % 5) + 1) as AnswerSlot}
               disabled={locked}
-              onClick={() => go([...path, choice.id])}
+              onClick={() => void go([...path, choice.id])}
             >
               {choice.text || `Pilihan ${index + 1}`}
             </AnswerTile>
@@ -153,6 +176,11 @@ export function BranchingPlayer({
             <p className="text-sm text-fg-subtle italic">Cerita berhenti di sini.</p>
           )}
         </div>
+      )}
+      {loading && (
+        <p role="status" className="inline-flex items-center gap-2 text-sm text-fg-muted">
+          <LoaderCircle className="size-4 animate-spin" /> Memuat lanjutan cerita…
+        </p>
       )}
     </div>
   );

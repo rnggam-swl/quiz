@@ -287,7 +287,7 @@ export function PracticePlayer({
       eventRef.current?.({
         type: "answered",
         questionIndex: index,
-        ...(outcome && { correct: outcome.result.correct, total: outcome.result.total }),
+        ...(outcome?.result && { correct: outcome.result.correct, total: outcome.result.total }),
       });
       if (!outcome) {
         playSound("tap");
@@ -296,8 +296,9 @@ export function PracticePlayer({
       }
       setOutcomes((o) => ({ ...o, [question.id]: outcome }));
       if (outcome.progress) setProgress(outcome.progress);
+      const ratio = outcome.result?.ratio;
       playSound(
-        outcome.result.ratio === 1 ? "correct" : outcome.result.ratio > 0 ? "partial" : "wrong",
+        ratio === undefined ? "tap" : ratio === 1 ? "correct" : ratio > 0 ? "partial" : "wrong",
       );
     },
     [adapter, attempt, busy, current, done, index, next, token],

@@ -39,7 +39,16 @@ export async function loadSnapshot(versionId: string): Promise<Snapshot | null> 
 export type SessionContext = {
   session: Pick<
     Tables<"sessions">,
-    "id" | "quiz_id" | "quiz_version_id" | "mode" | "status" | "code" | "opens_at" | "closes_at"
+    | "id"
+    | "quiz_id"
+    | "quiz_version_id"
+    | "mode"
+    | "status"
+    | "code"
+    | "opens_at"
+    | "closes_at"
+    | "title"
+    | "results_released_at"
   >;
   policy: Policy;
   quiz: Pick<Tables<"quizzes">, "id" | "slug" | "embed_allowed_origins">;
@@ -49,7 +58,7 @@ export type SessionContext = {
 };
 
 const SESSION_COLUMNS =
-  "id, quiz_id, quiz_version_id, mode, status, code, opens_at, closes_at, policy, quizzes!inner(id, slug, embed_allowed_origins)";
+  "id, quiz_id, quiz_version_id, mode, status, code, opens_at, closes_at, title, results_released_at, policy, quizzes!inner(id, slug, embed_allowed_origins)";
 
 async function contextFrom(
   row: (Tables<"sessions"> & { quizzes: SessionContext["quiz"] }) | null,

@@ -11,7 +11,7 @@ const HOTSPOT_SVG = `data:image/svg+xml,${encodeURIComponent(
     "</svg>",
 )}`;
 
-export type SampleSet = "core" | "advanced" | "all";
+export type SampleSet = "core" | "advanced" | "all" | "exam";
 
 /**
  * Demo quiz used by the dev playgrounds, one question of each type. `core` = the P1
@@ -202,7 +202,34 @@ export function sampleQuiz(set: SampleSet = "all"): { quiz: QuizDraft; questions
       },
     },
   ];
-  const questions = set === "core" ? core : set === "advanced" ? advanced : [...core, ...advanced];
+  const essayQuestion: Question = {
+    ...createQuestion("essay"),
+    prompt: "Jelaskan mengapa tumbuhan membutuhkan cahaya matahari.",
+    config: {
+      minWords: 10,
+      maxWords: 150,
+      rubric: [
+        { id: "isi", criterion: "Menyebut fotosintesis", points: 3 },
+        { id: "bahasa", criterion: "Bahasa jelas", points: 1 },
+      ],
+      guide: "Cahaya dipakai untuk fotosintesis: mengubah air dan CO₂ menjadi glukosa.",
+    },
+  };
+  const byType = (type: Question["type"]) => advanced.find((q) => q.type === type)!;
+  const questions =
+    set === "core"
+      ? core
+      : set === "advanced"
+        ? advanced
+        : set === "exam"
+          ? [
+              ...core,
+              byType("sequencing"),
+              byType("word_blank"),
+              byType("branching"),
+              essayQuestion,
+            ]
+          : [...core, ...advanced];
   return {
     quiz: {
       id: "playground-quiz",

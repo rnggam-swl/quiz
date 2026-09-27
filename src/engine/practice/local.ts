@@ -97,7 +97,9 @@ export function createLocalPracticeAdapter(
       const graded = gradeAnswer(q, raw);
       if (!graded) return { ok: false, error: "invalid" };
       attempt.responses.set(questionId, graded);
-      const results = new Map([...attempt.responses].map(([id, r]) => [id, r.result]));
+      const results = new Map(
+        [...attempt.responses].flatMap(([id, r]) => (r.result ? [[id, r.result] as const] : [])),
+      );
       const progress = progressInOrder(attempt.questionIds, results);
       return { ok: true, outcome: outcomeFor(policy, q, graded, progress) };
     },

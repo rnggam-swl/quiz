@@ -31,6 +31,11 @@ export type StripContext = {
   seed: number;
   /** Whether options/items may be shuffled (policy.shuffleOptions). */
   shuffle: boolean;
+  /**
+   * Exams send a branching story node by node (docs/04 · Branching). When set, only the
+   * start node and the nodes along this (server-validated) path are included.
+   */
+  storyPath?: readonly string[];
 };
 
 export type Capabilities = {

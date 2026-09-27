@@ -14,9 +14,11 @@ Ujian individu yang terjadwal, adil, dan sulit dicontek. Prioritasnya integritas
   shuffleQuestions: true,
   shuffleOptions: true,
   releaseResults: 'after_close',
-  requireLogin: true,           // atau embed token / daftar peserta
+  access: 'open',               // form "Buat ujian" menawarkan 'login' dan 'roster'
   allowEmbed: false,
   timer: { totalS: 3600 },
+  navigation: 'free',
+  attemptScoring: 'highest',
   integrity: { fullscreen: true, logTabSwitch: true, blockCopyPaste: true },
 }
 ```
@@ -30,10 +32,10 @@ Ujian individu yang terjadwal, adil, dan sulit dicontek. Prioritasnya integritas
 | Bank soal   | Ambil N soal acak dari quiz, bisa difilter berdasarkan `tags`                                  |
 | Acak        | Urutan soal dan opsi per peserta, dengan seed                                                  |
 | Percobaan   | Jumlah maksimum attempt. Jika lebih dari satu, pilih nilai tertinggi, terakhir, atau rata-rata |
-| Akses       | Login, kode akses tambahan, atau daftar peserta (email/NIS)                                    |
+| Akses       | Siapa saja, wajib login, atau daftar peserta (email/NIS); plus kode akses tambahan opsional    |
 | Navigasi    | Bebas (boleh kembali ke soal sebelumnya) atau maju saja                                        |
 | Rilis nilai | Langsung, setelah ujian ditutup, atau manual                                                   |
-| Akomodasi   | Waktu tambahan per peserta (mis. +25%)                                                         |
+| Akomodasi   | Waktu tambahan per peserta (mis. +25%), kolom ketiga di impor daftar peserta                   |
 
 ## Alur
 
@@ -95,3 +97,44 @@ Semua langkah ini **mencegah dan mencatat, bukan menjamin**. Browser tidak bisa 
 ## Tipe soal
 
 Semua tipe dengan `modes` berisi `exam` (lihat [04](04-question-types.md#matriks-kapabilitas)). Branching Story dikirim bertahap per node supaya seluruh graf tidak terbaca di klien.
+
+## Implementasi (P4)
+
+### Rute
+
+| Rute                                       | Untuk   | Isi                                                                                                                               |
+| ------------------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `/exam/[sessionId]`                        | peserta | Halaman instruksi + form masuk, shell ujian, lalu tanda terima/nilai. Tetap bisa dibuka setelah ujian ditutup untuk melihat nilai |
+| `/play/[code]`, `/join`                    | peserta | Kode ujian diarahkan ke `/exam/[sessionId]`, juga sebelum ujian dibuka                                                            |
+| `/quizzes/[id]/exams`                      | guru    | Daftar ujian sebuah quiz + tombol "Buat ujian" (quiz harus sudah terbit)                                                          |
+| `/quizzes/[id]/exams/new`                  | guru    | Form "Buat ujian" (P4-08), dengan peringatan soal yang tidak kompatibel                                                           |
+| `/quizzes/[id]/exams/[examId]`             | guru    | Monitor (auto refresh 10 detik): status, progres, sisa waktu, nilai, catatan integritas, aksi peserta                             |
+| `…/[examId]/roster`                        | guru    | Impor daftar peserta (tempel atau file CSV) dan hapus entri                                                                       |
+| `…/[examId]/grading`                       | guru    | Antrean penilaian esai per soal, dengan rubrik dan komentar                                                                       |
+| `…/[examId]/report`, `…/report/csv?kind=…` | guru    | Tabel nilai + analisis butir soal, ekspor CSV (`scores` / `items`)                                                                |
+
+Ujian adalah baris `sessions` dengan `mode = 'exam'`, `title`, dan `quiz_version_id` yang dipatok ke versi terbit terakhir saat dibuat, sehingga perubahan quiz tidak mengganggu ujian yang berjalan.
+
+### Masuk & akses
+
+- `joinExamAction` memeriksa jendela waktu dan kode akses, lalu memanggil `join_exam`:
+  - **Siapa saja:** nama bebas (disaring seperti nickname latihan).
+  - **Wajib masuk:** memakai akun Supabase yang sedang login; nama dari profil. Tombol "Masuk" membawa kembali ke halaman ujian.
+  - **Daftar peserta:** peserta mengetik NIS/email; nama diambil dari daftar. Tidak cocok → "tidak ada di daftar peserta".
+- Untuk login dan daftar peserta, perangkat kedua mendapat peserta yang sama. Jika attempt sedang berjalan, dicatat `multi_device` dan peserta melihat peringatan.
+- Server Action latihan menolak sesi ujian, jadi kode akses dan daftar peserta tidak bisa dilewati lewat `/play`.
+
+### Selama ujian
+
+- Soal dikirim tanpa kunci (`stripAnswers`); Cerita Bercabang dikirim per node (`storyStepAction`).
+- Jawaban disimpan per soal lewat `saveExamAnswerAction`; antrean offline di `localStorage` mengirim ulang tiap 5 detik dan saat online lagi.
+- Jika server menolak jawaban karena waktu habis (mis. guru mengakhiri ujian), player langsung mengirim jawaban yang tersimpan dan menampilkan tanda terima.
+- Catatan integritas dikirim per batch (maks. 50) tiap 10 detik dan saat halaman ditutup.
+
+### Guru
+
+- **Akhiri ujian** (`end_exam`): status `ended`, `closes_at` = sekarang, deadline attempt yang berjalan ditarik ke sekarang.
+- **Rilis nilai:** `results_released_at` diisi; selalu menang atas `releaseResults`. Rilis manual bisa ditarik kembali.
+- **Aksi peserta:** tambah waktu (attempt berjalan), buka ulang (attempt selesai, selama N menit), reset (hapus attempt).
+- **Penilaian esai:** `grade_response` menyimpan rasio, komentar, dan skor per kriteria; skor attempt yang sudah selesai ikut diperbarui.
+- **Laporan:** nilai akhir per peserta mengikuti `attemptScoring`. Analisis butir soal memakai attempt yang sudah selesai; soal dengan benar < 30% (minimal 3 jawaban dinilai) ditandai. Ekspor CSV memakai BOM UTF-8 agar terbaca Excel dan menetralkan sel yang diawali `=`, `+`, `-`, `@`. Ekspor XLSX belum ada: file CSV dibuka langsung oleh Excel/Sheets.

@@ -6,5 +6,6 @@ import { isSessionOpen, loadSessionByCode } from "@/engine/practice/server";
 export async function checkJoinCodeAction(code: string): Promise<{ ok: boolean }> {
   if (typeof code !== "string" || !/^\d{6}$/.test(code)) return { ok: false };
   const ctx = await loadSessionByCode(code);
-  return { ok: !!ctx && isSessionOpen(ctx) };
+  // An exam's code works before it opens: its page shows when it starts.
+  return { ok: !!ctx && (ctx.session.mode === "exam" || isSessionOpen(ctx)) };
 }

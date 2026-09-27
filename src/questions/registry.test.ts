@@ -16,6 +16,7 @@ const ANSWER_KEYS: Record<keyof typeof questionDefinitions, string[]> = {
   word_blank: ["blanks", "caseSensitive"],
   hotspot: ["spots"],
   branching: ["correct", "score", "scoring"],
+  essay: ["rubric", "guide"],
 };
 
 function collectKeys(value: unknown, keys = new Set<string>()): Set<string> {
@@ -62,7 +63,7 @@ describe.each(QUESTION_TYPES)("question type contract: %s", (type) => {
 
 describe("isQuestionType", () => {
   it("rejects unknown and prototype keys", () => {
-    expect(isQuestionType("essay")).toBe(false);
+    expect(isQuestionType("puzzle")).toBe(false);
     expect(isQuestionType("toString")).toBe(false);
     expect(isQuestionType("__proto__")).toBe(false);
   });
