@@ -2,6 +2,7 @@
 
 import { QuestionView } from "@/components/player/QuestionView";
 import { cn } from "@/lib/cn";
+import { formatResult } from "@/lib/format";
 import type { QuestionType } from "@/questions/registry";
 import type { ScoreResult } from "@/questions/types";
 
@@ -47,7 +48,7 @@ export function AttemptReview({ entries }: { entries: ReviewEntry[] }) {
                 )}
               >
                 {{ ok: "Benar", partial: "Sebagian", wrong: "Salah", skip: "Tidak dijawab" }[state]}
-                {entry.result && ` · ${entry.result.correct}/${entry.result.total}`}
+                {entry.result && ` · ${formatResult(entry.result)}`}
               </span>
               <span className="ml-auto text-fg-muted tabular-nums">
                 {entry.points}/{entry.maxPoints} poin

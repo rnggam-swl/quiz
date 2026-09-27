@@ -1,50 +1,11 @@
 "use client";
 
-import { useState } from "react";
-
+import { NumberInput } from "@/components/editor/NumberInput";
 import { Input, Label } from "@/components/ui/Input";
+import { formatNumber } from "@/lib/format";
 
 import type { EditorProps } from "../ui-types";
-import { parseNumberInput, type NumberConfig } from "./definition";
-
-const formatNumber = (n: number) => n.toLocaleString("id-ID", { maximumFractionDigits: 6 });
-
-/** Number field that keeps what the user typed ("3," while typing) and reports parsed values. */
-function NumberInput({
-  id,
-  value,
-  onValue,
-  min,
-}: {
-  id: string;
-  value: number;
-  onValue: (value: number) => void;
-  min?: number;
-}) {
-  const [text, setText] = useState(() => String(value).replace(".", ","));
-  const parsed = parseNumberInput(text);
-  const invalid = text.trim() !== "" && (parsed === null || (min !== undefined && parsed < min));
-
-  return (
-    <Input
-      id={id}
-      inputMode="decimal"
-      value={text}
-      onChange={(e) => {
-        setText(e.target.value);
-        const next = parseNumberInput(e.target.value);
-        if (next !== null && (min === undefined || next >= min)) onValue(next);
-      }}
-      onBlur={() => {
-        if (text.trim() === "") {
-          setText("0");
-          onValue(0);
-        }
-      }}
-      aria-invalid={invalid || undefined}
-    />
-  );
-}
+import type { NumberConfig } from "./definition";
 
 export function NumberEditor({ config, onChange }: EditorProps<NumberConfig>) {
   return (

@@ -3,6 +3,7 @@
 import { Check, Plus, Trash2 } from "lucide-react";
 import { useRef } from "react";
 
+import { ItemMediaButton } from "@/components/editor/ItemMediaButton";
 import { AnswerShape, type AnswerSlot } from "@/components/player/AnswerShape";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
@@ -10,6 +11,7 @@ import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/cn";
 import { createId } from "@/lib/id";
 
+import { withItemMedia, type MediaRef } from "../shared";
 import type { EditorProps } from "../ui-types";
 import { MAX_OPTIONS, type MultipleChoiceConfig } from "./definition";
 
@@ -23,6 +25,13 @@ export function MultipleChoiceEditor({
 
   function setText(id: string, text: string) {
     onChange({ ...config, options: config.options.map((o) => (o.id === id ? { ...o, text } : o)) });
+  }
+
+  function setMedia(id: string, media: MediaRef | undefined) {
+    onChange({
+      ...config,
+      options: config.options.map((o) => (o.id === id ? withItemMedia(o, media) : o)),
+    });
   }
 
   function toggleCorrect(id: string) {
@@ -107,10 +116,15 @@ export function MultipleChoiceEditor({
                     addOption(index);
                   }
                 }}
-                placeholder={`Opsi ${index + 1}`}
+                placeholder={option.media ? "Teks (opsional)" : `Opsi ${index + 1}`}
                 aria-label={`Teks opsi ${index + 1}`}
                 aria-invalid={invalid || undefined}
                 className="border-transparent bg-transparent hover:border-line"
+              />
+              <ItemMediaButton
+                media={option.media}
+                onChange={(media) => setMedia(option.id, media)}
+                label={`opsi ${index + 1}`}
               />
               <button
                 type="button"

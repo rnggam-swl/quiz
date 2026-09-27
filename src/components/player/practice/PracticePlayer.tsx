@@ -16,7 +16,7 @@ import type {
   Result,
 } from "@/engine/practice/types";
 import { playSound } from "@/lib/sound";
-import { themeStyle } from "@/lib/theme";
+import { themeScheme, themeStyle } from "@/lib/theme";
 import { getDefinition } from "@/questions/registry";
 
 import { FeedbackPanel, Hud, NicknameForm, SummaryScreen } from "./parts";
@@ -311,11 +311,12 @@ export function PracticePlayer({
   }
 
   const style = themeStyle(info.theme) as CSSProperties;
+  const scheme = themeScheme(info.theme);
   const shell = `flex min-h-full flex-1 flex-col bg-theme-bg text-fg ${className ?? ""}`;
 
   if (phase.kind === "loading" || phase.kind === "finishing") {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <div className="flex flex-1 items-center justify-center gap-2 text-fg-muted" role="status">
           <LoaderCircle className="size-5 animate-spin" />
           {phase.kind === "finishing" ? "Menghitung skor…" : "Memuat quiz…"}
@@ -326,7 +327,7 @@ export function PracticePlayer({
 
   if (phase.kind === "blocked") {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <div className="m-auto flex max-w-sm flex-col items-center gap-3 p-6 text-center">
           <p className="text-4xl" aria-hidden>
             🔒
@@ -344,7 +345,7 @@ export function PracticePlayer({
 
   if (phase.kind === "welcomeBack") {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <div className="m-auto flex max-w-sm flex-col items-center gap-4 p-6 text-center">
           <p className="text-4xl" aria-hidden>
             👋
@@ -366,7 +367,7 @@ export function PracticePlayer({
 
   if (phase.kind === "nickname") {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <NicknameForm info={info} busy={busy} error={phase.error} onSubmit={join} />
       </div>
     );
@@ -374,7 +375,7 @@ export function PracticePlayer({
 
   if (phase.kind === "summary") {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <SummaryScreen
           summary={phase.summary}
           gamification={info.policy.gamification}
@@ -389,7 +390,7 @@ export function PracticePlayer({
   // Playing.
   if (!current) {
     return (
-      <div className={shell} style={style}>
+      <div className={shell} style={style} data-scheme={scheme}>
         <p className="m-auto p-6 text-center text-fg-muted">Quiz ini belum punya soal.</p>
       </div>
     );
@@ -403,7 +404,7 @@ export function PracticePlayer({
   const isLast = index + 1 >= questions.length;
 
   return (
-    <div className={shell} style={style}>
+    <div className={shell} style={style} data-scheme={scheme}>
       <Hud
         index={index}
         total={questions.length}

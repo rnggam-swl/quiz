@@ -4,9 +4,13 @@
  * Design tokens — docs/05-design-system.md.
  * Editor = calm neutrals + one accent. Player = answer colours + the quiz theme.
  * Contrast values are checked in src/lib/color.test.ts.
+ *
+ * [data-scheme] pins light or dark tokens on a subtree whatever the device uses — the
+ * player sets it from the quiz background (themeScheme) so text stays readable on it.
  */
 
-:root {
+:root,
+[data-scheme="light"] {
   color-scheme: light;
 
   --canvas: #f8fafc;
@@ -81,7 +85,8 @@
   }
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+[data-scheme="dark"] {
   color-scheme: dark;
   --canvas: #0b0f19;
   --surface: #111827;

@@ -30,3 +30,24 @@ export function formatDuration(from: Date | string, to: Date | string): string {
   const s = String(total % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
+
+/** "1.250,5" — Indonesian number formatting for values authors and participants type. */
+export function formatNumber(n: number): string {
+  return n.toLocaleString("id-ID", { maximumFractionDigits: 6 });
+}
+
+/** What follows a number for `unit`: "%" and "°C" attach ("52%"), words get a space ("5 km"). */
+export function unitSuffix(unit: string | undefined): string {
+  if (!unit) return "";
+  return /^[%°‰]/.test(unit) ? unit : ` ${unit}`;
+}
+
+/**
+ * "3/4" for counted units; "50%" when the credit is fractional (slider distance, a
+ * story ending worth half) and a fraction like "0.5/1" would read oddly.
+ */
+export function formatResult(result: { correct: number; total: number; ratio: number }): string {
+  return Number.isInteger(result.correct)
+    ? `${result.correct}/${result.total}`
+    : `${Math.round(result.ratio * 100)}%`;
+}

@@ -32,6 +32,14 @@ export function itemHasContent(item: Item): boolean {
   return item.text.trim().length > 0 || item.media !== undefined;
 }
 
+/** A copy of `item` with `media` set, or without the key once it's removed. */
+export function withItemMedia<T extends Item>(item: T, media: MediaRef | undefined): T {
+  const next = { ...item };
+  if (media) next.media = media;
+  else delete next.media;
+  return next;
+}
+
 /** Plain-text label for an item in messages: its text, or "Opsi 3" when it only has media. */
 export function itemLabel(item: Item, index: number, noun = "Opsi"): string {
   const text = item.text.trim();

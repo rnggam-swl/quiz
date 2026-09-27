@@ -22,12 +22,17 @@ Setiap tipe soal adalah modul di `src/questions/<tipe>/` yang mengikuti kontrak 
 
 ⚠️ = boleh dipakai, tapi editor menampilkan peringatan. Contohnya isian di rebutan: kecepatan mengetik ikut menentukan hasil.
 
-Editor menyembunyikan atau menonaktifkan tipe yang tidak didukung mode sesi yang dipilih. Saat membuat sesi, soal yang tidak kompatibel dilaporkan dan bisa dilewati.
+Matriks ini ada di kode sebagai `capabilities.modes` tiap tipe, dan alasannya di `capabilities.notes` (wajib untuk mode ⚠️, dijaga test `modes.test.ts`). Di editor:
+
+- Panel properti menampilkan chip mode (✓ / ⚠️ / coret) di bawah pilihan tipe, lengkap dengan alasannya.
+- Menu "Tambah soal" menulis "Tidak untuk: Rebutan, Royale" di bawah tipe yang terbatas. Menu ini juga bisa difilter per mode (`mode` di `AddQuestionMenu`, dari `typesForMode()`), untuk quiz yang dibuat khusus satu mode (P4+).
+- Saat membuat sesi ujian/live/battle, soal yang tidak kompatibel dilaporkan dan bisa dilewati (P4–P7).
 
 ## Konvensi umum
 
 - Setiap item atau opsi punya `id` stabil (`nanoid`), **bukan indeks**. Ini memungkinkan pengacakan tanpa kehilangan pemetaan jawaban. Prototipe masih memakai indeks dan perlu diubah.
-- Semua teks item boleh punya `media?: MediaRef` (gambar atau audio), seperti lampiran di prototipe.
+- Item atau opsi boleh punya `media?: MediaRef`, seperti lampiran di prototipe. Untuk item, editor hanya menawarkan **gambar**: item dirender sebagai tombol, dan kontrol audio tidak boleh berada di dalam tombol. Audio tetap bisa dipasang di level soal.
+- Semua URL media, termasuk yang ada di dalam `config` (gambar item, gambar hotspot), harus berasal dari bucket `quiz-media`. Server menolak draf yang melanggar (`configMediaUrls()` di `src/lib/quiz-data.ts`).
 - `ScoreResult.ratio = correct / total`, dengan `total = 0` → soal tidak dinilai.
 - Poin akhir = `question.points × ratio × pengali mode`. Pengali mode contohnya bonus kecepatan di live.
 
@@ -85,20 +90,15 @@ Benar jika `|answer − value| ≤ tolerance`.
 ## Slider — `slider`
 
 ```ts
-config: {
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  tolerance: number;
-  partial: boolean;
-}
-answer: {
-  value: number;
-}
+config: { min: number; max: number; step: number; value: number; tolerance: number; partial: boolean; unit?: string }
+answer: { value: number }
 ```
 
-Jika `partial`: `ratio = max(0, 1 − |selisih| / (max − min) × 2)`.
+- Benar penuh jika `|jawaban − value| ≤ tolerance`.
+- Jika `partial`: `ratio = max(0, 1 − (|selisih| − tolerance) / (max − min) × 2)`. Toleransi dikurangi dulu supaya nilai tidak melompat turun tepat di luar toleransi; nilai habis di setengah rentang.
+- **Validasi:** `max > min`, langkah tidak lebih besar dari rentang dan maksimal 1000 titik, jawaban di dalam rentang, dan jawaban bisa dicapai dengan kelipatan langkah (dengan memperhitungkan toleransi).
+- **Player:** `<input type="range">` besar dengan tombol −/+. Posisi awal di tengah, tapi baru dihitung sebagai jawaban setelah digeser. Satuan `%` dan `°C` ditulis rapat ("52%").
+- **Strip:** hanya `min`, `max`, `step`, `unit`.
 
 ## Matching — `matching`
 
@@ -119,17 +119,22 @@ config: { items: Item[]; oddId: string; reason?: string }
 answer: { selectedId: string }
 ```
 
-- **Validasi:** minimal 3 item. `reason` ditampilkan saat reveal.
+- **Validasi:** 3–5 item (satu warna + bentuk per item), tidak ada item kosong atau kembar, dan satu item ditandai.
+- **Player:** seperti pilihan tunggal, langsung terjawab saat diketuk. `reason` ditampilkan saat reveal.
+- **Strip:** hapus `oddId` dan `reason`, acak `items` jika diizinkan.
 
 ## Sequencing — `sequencing`
 
 ```ts
-config: { items: Item[] }          // urutan di config = urutan benar
+config: { items: Item[]; scoring: 'adjacent' | 'position' }   // urutan di config = urutan benar
 answer: { orderedIds: string[] }
 ```
 
-- Prototipe menilai per posisi persis, sehingga satu item yang tergeser bisa membuat hampir semua posisi salah. Usulan: nilai = **pasangan berurutan yang benar** (`A→B`, `B→C`, …) / `(n−1)`. Pilihan metode dibuat sebagai opsi `scoring: 'position' | 'adjacent'`.
-- **Strip:** acak dengan seed dan pastikan hasil acak ≠ urutan benar.
+- Prototipe menilai per posisi persis, sehingga satu item yang tergeser bisa membuat hampir semua posisi salah. Default sekarang **`adjacent`**: nilai = pasangan berurutan yang benar (`A→B`, `B→C`, …) / `(n−1)`. `position` tetap tersedia sebagai opsi.
+- Id yang tidak dikenal atau berulang di jawaban diabaikan, jadi jawaban buatan tidak bisa menghitung satu item dua kali.
+- **Validasi:** minimal 3 item, tidak kosong, dan tidak kembar (item kembar membuat urutan ambigu).
+- **Strip:** selalu diacak dengan seed, dan hasil acak dijamin ≠ urutan benar, walaupun acak opsi dimatikan.
+- **Player:** seret (mouse, sentuhan, atau keyboard: spasi → panah → spasi, dengan pengumuman berbahasa Indonesia) atau tombol ▲▼. Reveal menandai item yang salah posisi dengan "seharusnya #k".
 
 ## Grouping — `grouping`
 
@@ -138,44 +143,55 @@ config: { groups: { id: string; name: string }[]; items: (Item & { groupId: stri
 answer: { placement: Record<string /*itemId*/, string /*groupId*/> }
 ```
 
-- **Validasi:** minimal 2 grup, dan setiap grup berisi minimal 1 item.
+- `correct` = item di kelompok yang benar, `total` = jumlah item. Satu item hanya bisa berada di satu kelompok, jadi tidak perlu penalti tambahan. Kunci warisan (`__proto__`) diabaikan.
+- **Validasi:** 2–5 kelompok bernama, setiap kelompok berisi minimal 1 item, tidak ada item kosong.
+- **Strip:** hapus `groupId`. Item selalu diacak, karena ditulis per kelompok dan urutannya akan membocorkan jawaban.
+- **Player:** ketuk item lalu ketuk kelompoknya, atau seret. Item bisa dipindah atau dikembalikan ke kumpulan sebelum dikirim. Reveal menandai ✓/✗ dan menulis kelompok yang benar.
 
 ## Guess the Blank — `word_blank`
 
 ```ts
 config: { text: string; unit: 'letter' | 'word'; blanks: number[]; hint?: string; caseSensitive: boolean }
-answer: { values: Record<number /*tokenIdx*/, string> }
+answer: { values: Record<string /*tokenIdx*/, string> }
 ```
 
-- Token dibentuk seperti `wbTokens()` di prototipe: per huruf, atau per kata (dipisah spasi).
-- **Strip:** kirim token yang bukan blank, plus panjang tiap blank. Huruf yang di-blank tidak dikirim.
+- Token dibentuk seperti `wbTokens()` di prototipe: per huruf (per code point, jadi huruf beraksen dan emoji tidak terpotong; spasi menjadi jarak) atau per kata (dipisah spasi). Blank yang menunjuk spasi atau indeks di luar teks diabaikan (`activeBlanks()`).
+- Nilai parsial per blank, dengan normalisasi yang sama dengan Isian Singkat.
+- **Strip:** `tokens: ({ kind: 'text', text } | { kind: 'blank', length })[]`. Huruf/kata yang di-blank tidak pernah dikirim, hanya panjangnya.
+- **Player:** satu kotak per huruf dengan auto-advance, Backspace mundur ke kotak sebelumnya, Enter mengirim. Kata yang lebih panjang dari layar HP boleh berlanjut ke baris berikutnya. Reveal menulis huruf yang benar di bawah kotak yang salah.
 
 ## Hotspot — `hotspot`
 
 ```ts
-config: { image: MediaRef; spots: { id: string; x: number; y: number; r: number; label?: string }[]; maxClicks?: number }
+config: { image: MediaRef | null; aspect: number; spots: { id: string; x: number; y: number; r: number; label?: string }[]; maxClicks: number | null }
 answer: { clicks: { x: number; y: number }[] }   // koordinat dalam persen gambar
 ```
 
-- **Bug prototipe:** klik yang meleset tidak dibatasi, jadi peserta bisa mengklik seluruh gambar untuk mendapat nilai penuh. Aturan baru: `maxClicks` default = `spots.length`, klik di luar jatah diabaikan, dan nilai = spot ditemukan − klik meleset (min 0) / jumlah spot.
-- **Strip:** hapus `spots`, kirim jumlahnya saja.
+- `x`/`y` dalam persen lebar/tinggi gambar, `r` dalam persen **lebar**. `aspect` (tinggi/lebar) diukur editor saat gambar diunggah, sehingga jarak vertikal dihitung dalam satuan yang sama dan lingkaran tetap bulat di gambar yang tidak persegi.
+- **Bug prototipe:** klik yang meleset tidak dibatasi, jadi peserta bisa mengklik seluruh gambar untuk mendapat nilai penuh. Aturan baru: `maxClicks` default (null) = jumlah titik, klik di luar jatah diabaikan, dan nilai = (titik ditemukan − klik meleset, min 0) / jumlah titik. Klik ulang pada titik yang sudah ditemukan tidak dihitung meleset.
+- **Validasi:** gambar ada, minimal satu titik, dan `maxClicks` tidak lebih kecil dari jumlah titik.
+- **Strip:** kirim `image`, `aspect`, `spotCount`, dan jatah klik. `spots` tidak pernah dikirim.
+- **Player:** klik/ketuk untuk menandai, ketuk penanda untuk menghapus. Keyboard: fokus ke gambar, panah menggerakkan penanda silang, Enter menandai. **Editor:** klik gambar untuk menambah titik, panah menggeser titik yang dipilih, Delete menghapus.
 
 ## Branching Story — `branching`
 
 ```ts
 config: {
   startId: string;
+  scoring: 'ending' | 'choices';
   nodes: { id: string; text: string; media?: MediaRef; x: number; y: number;
-           ending?: { label: string; score: number /*0..1*/ };
-           choices: { id: string; text: string; targetId: string; correct: boolean }[] }[];
+           ending: { label: string; score: number /*0..1*/ } | null;
+           choices: { id: string; text: string; targetId: string | null; correct: boolean }[] }[];
 }
 answer: { path: string[] /*choiceId berurutan*/ }
 ```
 
-- Prototipe menilai `pilihan benar / pilihan yang diambil`, sehingga jalur buruk yang pendek bisa bernilai setara dengan jalur baik yang panjang. Usulan: nilai ditentukan oleh **ending yang dicapai** (`ending.score`), dengan penilaian per pilihan sebagai opsi.
-- Server memvalidasi bahwa `path` adalah jalur yang sah di graf.
-- **Strip:** hapus `correct` dan `ending.score`. Node dikirim bertahap (hanya node yang sudah dicapai) untuk ujian. Untuk latihan, seluruh graf boleh dikirim.
-- Validasi publish diambil dari prototipe: node awal harus ada, harus ada ending, tidak boleh ada jalan buntu, tidak boleh ada pilihan tanpa target, dan semua node harus bisa dijangkau.
+- Prototipe menilai `pilihan benar / pilihan yang diambil`, sehingga jalur buruk yang pendek bisa bernilai setara dengan jalur baik yang panjang. Default sekarang **`ending`**: nilai = `ending.score` dari akhir yang dicapai. `choices` tetap tersedia, dan setiap pilihan hanya dihitung sekali supaya berputar di pilihan benar tidak menaikkan nilai.
+- Server menelusuri ulang `path` dari node awal (`walkStory()`). Jalur yang tidak sah atau belum sampai akhir bernilai 0.
+- **Validasi** (diambil dari prototipe, ditambah satu): node awal ada dan bukan akhir cerita, minimal satu akhir, tidak ada jalan buntu, tidak ada pilihan tanpa tujuan, semua node bisa dijangkau, dan **dari setiap node cerita masih bisa sampai ke akhir** (tidak terjebak di putaran). Mode `ending` butuh minimal satu akhir bernilai > 0, dan mode `choices` butuh minimal satu pilihan benar.
+- **Strip:** hapus `correct`, `ending.score`, dan posisi kanvas. Pilihan tanpa tujuan tidak dikirim. Untuk latihan seluruh graf dikirim; di ujian node dikirim bertahap (P4-07b).
+- **Editor:** flowchart React Flow (dimuat terpisah dari player) dengan node yang bisa digeser, seret titik pilihan ke node mana pun untuk menyambung, garis bezier, penanda awal dan akhir, serta mode layar penuh. Semua hal juga bisa dilakukan lewat formulir di bawah kanvas (pilih tujuan, "+ Node baru"), jadi editor tetap bisa dipakai dengan keyboard.
+- **Player:** node satu per satu, dengan tombol **Mundur** dan **Dari awal** sebelum dikirim. Jawaban baru tercatat setelah sampai di akhir cerita. Reveal menampilkan jejak pilihan dan nilai akhir.
 
 ## Esai — `essay`
 
@@ -192,6 +208,7 @@ answer: { text: string }
 
 1. Buat `src/questions/<tipe>/` berisi `definition.ts` (murni), `definition.test.ts`, `Editor.tsx`, dan `Player.tsx`.
 2. Di `definition.test.ts`, uji kasus benar, salah, parsial, dan jawaban kosong/tidak valid, serta hasil `stripAnswers`.
+   Isi `capabilities.modes`, dan beri `capabilities.notes` untuk setiap mode ⚠️ (idealnya juga untuk mode yang tidak didukung).
 3. Daftarkan definisi di `registry.ts` dan UI-nya di `ui.tsx`.
 4. Tambahkan field kunci jawabannya ke `ANSWER_KEYS` di `registry.test.ts`. Test kontrak bersama akan memastikan field itu tidak pernah bocor.
 5. Tambahkan baris di matriks kapabilitas dokumen ini.

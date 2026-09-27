@@ -10,6 +10,7 @@
 | Realtime        | **Supabase Realtime** (Broadcast + Presence)                | Cukup untuk skala kelas, tanpa server WebSocket sendiri              |
 | Validasi        | **Zod**                                                     | Satu skema untuk tipe TS, validasi editor, dan validasi server       |
 | Drag & drop     | **dnd-kit**                                                 | Aksesibel, mendukung sentuhan                                        |
+| Flowchart       | **React Flow** (`@xyflow/react`)                            | Editor Cerita Bercabang; dimuat terpisah, tidak masuk bundle player  |
 | Animasi         | **Framer Motion**, **canvas-confetti**                      | Feedback yang seru di player                                         |
 | State editor    | **Zustand**                                                 | State dokumen quiz dan autosave                                      |
 | Test            | **Vitest** (unit, terutama `score()`), **Playwright** (E2E) |                                                                      |

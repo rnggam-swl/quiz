@@ -58,6 +58,7 @@ export const shortAnswer: QuestionDefinition<
   answerSchema,
   capabilities: {
     modes: { practice: "ok", exam: "ok", live: "ok", battle_buzzer: "warn", battle_royale: "ok" },
+    notes: { battle_buzzer: "Kecepatan mengetik ikut menentukan hasil rebutan." },
     avgSeconds: 20,
     partialCredit: false,
   },

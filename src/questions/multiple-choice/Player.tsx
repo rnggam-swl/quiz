@@ -2,6 +2,7 @@
 
 import type { AnswerSlot } from "@/components/player/AnswerShape";
 import { AnswerTile, type AnswerTileState } from "@/components/player/AnswerTile";
+import { ItemContent } from "@/components/player/ItemContent";
 
 import type { PlayerProps } from "../ui-types";
 import type {
@@ -60,7 +61,7 @@ export function MultipleChoicePlayer({
             disabled={disabled || !!reveal}
             onClick={() => choose(option.id)}
           >
-            {option.text || `Opsi ${index + 1}`}
+            <ItemContent item={option} fallback={`Opsi ${index + 1}`} />
           </AnswerTile>
         ))}
       </div>

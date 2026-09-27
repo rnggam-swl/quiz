@@ -60,6 +60,15 @@ describe("hasAuthoredContent", () => {
     expect(hasAuthoredContent({ options: [{ id: "x", text: "Jakarta" }] })).toBe(true);
     expect(hasAuthoredContent({ value: 42, tolerance: 0 })).toBe(true);
   });
+
+  it("ignores values that equal the type's defaults", () => {
+    const defaults = { min: 0, max: 100, unit: "letter", items: [{ id: "a", text: "" }] };
+    expect(hasAuthoredContent({ ...defaults, items: [{ id: "b", text: "" }] }, defaults)).toBe(
+      false,
+    );
+    expect(hasAuthoredContent({ ...defaults, max: 10 }, defaults)).toBe(true);
+    expect(hasAuthoredContent({ ...defaults, unit: "word" }, defaults)).toBe(true);
+  });
 });
 
 describe("validateQuestion", () => {

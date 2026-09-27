@@ -46,6 +46,26 @@ describe("checkDraft", () => {
     ]);
   });
 
+  it("checks media nested in a question config too", () => {
+    const withMedia = (url: string) => ({
+      ...createQuestion("multiple_choice"),
+      config: {
+        options: [
+          { id: "a", text: "", media: { kind: "image" as const, url } },
+          { id: "b", text: "B" },
+        ],
+        correctIds: ["a"],
+        multiple: false,
+      },
+    });
+    expect(checkDraft({ ...base, questions: [withMedia(own)] }, SUPABASE)).toEqual([]);
+    const problems = checkDraft(
+      { ...base, questions: [withMedia("https://evil.example/pixel.gif")] },
+      SUPABASE,
+    );
+    expect(problems.map((p) => p.message)).toEqual(["Media harus diunggah lewat editor."]);
+  });
+
   it("flags a hotlinked cover", () => {
     const problems = checkDraft(
       { ...base, quiz: { ...base.quiz, coverUrl: "https://x.test/c.jpg" }, questions: [] },

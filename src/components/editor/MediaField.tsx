@@ -1,46 +1,30 @@
 "use client";
 
 import { ImagePlus, LoaderCircle, Music, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { toast } from "@/components/ui/Toast";
-import { checkMediaFile, MEDIA_ACCEPT } from "@/lib/media";
+import { MEDIA_ACCEPT } from "@/lib/media";
 import type { MediaRef } from "@/questions/shared";
 
-import { useEditorContext } from "./EditorContext";
+import { useMediaUpload } from "./useMediaUpload";
 
 const MAX_MEDIA = 4;
 
 export function MediaField({
-  quizId,
   media,
   onChange,
 }: {
-  quizId: string;
   media: MediaRef[];
   onChange: (media: MediaRef[]) => void;
 }) {
-  const { adapter } = useEditorContext();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { upload, uploading } = useMediaUpload();
 
-  async function upload(file: File) {
-    const problem = checkMediaFile(file);
-    if (problem) {
-      toast.error(problem);
-      return;
-    }
-    setUploading(true);
-    try {
-      const ref = await adapter.uploadMedia(file, quizId);
-      onChange([...media, ref]);
-    } catch {
-      toast.error("Gagal mengunggah file. Coba lagi.");
-    } finally {
-      setUploading(false);
-    }
+  async function add(file: File) {
+    const ref = await upload(file);
+    if (ref) onChange([...media, ref]);
   }
 
   return (
@@ -104,7 +88,7 @@ export function MediaField({
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
-              if (file) void upload(file);
+              if (file) void add(file);
             }}
           />
           <Button

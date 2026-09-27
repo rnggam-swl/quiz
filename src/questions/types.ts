@@ -36,6 +36,8 @@ export type StripContext = {
 export type Capabilities = {
   /** Modes where the type may be used; "warn" modes are allowed but flagged in the editor. */
   modes: Partial<Record<SessionMode, "ok" | "warn">>;
+  /** Why a mode is "warn" (or unsupported), shown next to the type in the editor. */
+  notes?: Partial<Record<SessionMode, string>>;
   /** Rough time to answer, used for default timers and battle suitability. */
   avgSeconds: number;
   partialCredit: boolean;

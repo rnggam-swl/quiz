@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { parseHex, readableTextColor } from "./color";
+import { parseHex, readableTextColor, TEXT_ON_DARK } from "./color";
 
 export type QuizTheme = { primary?: string; bg?: string };
 
@@ -18,13 +18,31 @@ export const THEME_PRESETS = [
 
 export const DEFAULT_THEME = THEME_PRESETS[0];
 
-/** CSS variables for a quiz theme, including a readable text colour on the primary. */
+const validBg = (theme: QuizTheme | null | undefined) =>
+  theme?.bg && parseHex(theme.bg) ? theme.bg : null;
+
+/**
+ * CSS variables for a quiz theme, including a readable text colour on the primary.
+ * The background is only set when the quiz picked one; otherwise the light/dark default
+ * applies. Pair with `data-scheme={themeScheme(theme)}` so text matches that background.
+ */
 export function themeStyle(theme: QuizTheme | null | undefined): CSSProperties {
   const primary = theme?.primary && parseHex(theme.primary) ? theme.primary : DEFAULT_THEME.primary;
-  const bg = theme?.bg && parseHex(theme.bg) ? theme.bg : DEFAULT_THEME.bg;
+  const bg = validBg(theme);
   return {
     "--theme-primary": primary,
     "--on-theme": readableTextColor(primary),
-    "--theme-bg": bg,
+    ...(bg && { "--theme-bg": bg }),
   } as CSSProperties;
+}
+
+/**
+ * Light or dark tokens that stay readable on the quiz's own background (every preset
+ * is light, so a dark-mode phone would otherwise get light text on a light page).
+ * Undefined = no custom background: follow the device.
+ */
+export function themeScheme(theme: QuizTheme | null | undefined): "light" | "dark" | undefined {
+  const bg = validBg(theme);
+  if (!bg) return undefined;
+  return readableTextColor(bg) === TEXT_ON_DARK ? "dark" : "light";
 }

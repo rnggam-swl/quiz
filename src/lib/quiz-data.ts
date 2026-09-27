@@ -85,6 +85,19 @@ export function isOwnMediaUrl(url: string, supabaseUrl: string): boolean {
   return url.startsWith(base) && !url.slice(base.length).includes("..");
 }
 
+/**
+ * Every media URL inside a question config (option/item attachments, the hotspot
+ * image…): any object shaped like a MediaRef, at any depth.
+ */
+export function configMediaUrls(value: unknown, urls: string[] = []): string[] {
+  if (Array.isArray(value)) value.forEach((v) => configMediaUrls(v, urls));
+  else if (value && typeof value === "object") {
+    if (mediaSchema.safeParse(value).success) urls.push((value as MediaRef).url);
+    else Object.values(value).forEach((v) => configMediaUrls(v, urls));
+  }
+  return urls;
+}
+
 export const saveDraftInputSchema = z.object({
   quizId: z.uuid(),
   baseRevision: z.number().int().min(0),
@@ -118,7 +131,8 @@ export function checkDraft(
     if (!getDefinition(q.type).configSchema.safeParse(q.config).success) {
       problems.push({ questionId: q.id, message: "Isi soal tidak valid." });
     }
-    if (q.media.some((m: MediaRef) => !isOwnMediaUrl(m.url, supabaseUrl))) {
+    const urls = [...q.media.map((m: MediaRef) => m.url), ...configMediaUrls(q.config)];
+    if (urls.some((url) => !isOwnMediaUrl(url, supabaseUrl))) {
       problems.push({ questionId: q.id, message: "Media harus diunggah lewat editor." });
     }
   }

@@ -32,6 +32,7 @@ Produk ini punya **dua bahasa visual** yang sengaja dibedakan:
 - **Token tema quiz (bisa diatur guru):** `--theme-primary`, `--on-theme`, `--theme-bg`. Preset diambil dari prototipe: Indigo, Emerald, Amber, Rose, Violet, Sky, Pink, Slate. Default Indigo digeser dari `#5b6af7` (4.3:1) ke `#4f5bea` (5.2:1).
 - **Warna teks di atas warna tema dihitung otomatis** dengan `readableTextColor()` di [`src/lib/color.ts`](../src/lib/color.ts). Beberapa preset prototipe gagal kontras dengan teks putih, misalnya Emerald `#10b981` 2.5:1, Amber `#f59e0b` 2.2:1, dan Sky `#0ea5e9` 2.8:1. Untuk preset seperti ini, teks otomatis menjadi gelap (`#1a1a24`). Saat tema diterapkan, set `--on-theme` dengan hasil fungsi ini.
 - **Mode gelap:** mengikuti sistem operasi, kecuali `<html data-theme="light|dark">` memaksanya. Layar proyektor default memakai latar gelap.
+- **Latar tema quiz vs mode gelap:** semua preset tema berlatar terang. Karena itu player memasang `data-scheme="light|dark"` (dari `themeScheme()` di [`src/lib/theme.ts`](../src/lib/theme.ts), berdasarkan kecerahan latar) supaya token teks mengikuti latar quiz, bukan mode perangkat. Tanpa ini, HP dengan mode gelap menampilkan teks terang di atas latar terang. Quiz tanpa latar kustom tetap mengikuti perangkat.
 
 ## Warna & bentuk opsi jawaban
 

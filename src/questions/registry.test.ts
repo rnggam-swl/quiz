@@ -9,6 +9,13 @@ const ANSWER_KEYS: Record<keyof typeof questionDefinitions, string[]> = {
   short_answer: ["accepted", "fuzzy", "caseSensitive"],
   number: ["value", "tolerance"],
   matching: ["pairs"],
+  slider: ["value", "tolerance", "partial"],
+  odd_one_out: ["oddId", "reason"],
+  sequencing: ["scoring"],
+  grouping: ["groupId"],
+  word_blank: ["blanks", "caseSensitive"],
+  hotspot: ["spots"],
+  branching: ["correct", "score", "scoring"],
 };
 
 function collectKeys(value: unknown, keys = new Set<string>()): Set<string> {
