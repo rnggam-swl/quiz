@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { clockOffset, measureClockOffset, median, msUntil, sampleOffset } from "./clock";
+import { deriveLiveKeyPair } from "./keys";
 import { createMemoryHub } from "./memory";
-import { parseLiveEvent, parsePresence, type LiveEvent, type PresenceMember } from "./types";
+import { generateSigningKeys, importSigningKey, signText, verifyText } from "./signing";
+import {
+  MAX_SIGNED_BYTES,
+  parseLiveEvent,
+  parsePresence,
+  type LiveEvent,
+  type PresenceMember,
+} from "./types";
 
 describe("clock sync", () => {
   it("takes the server time at the midpoint of the round trip", () => {
@@ -95,5 +103,40 @@ describe("memory hub", () => {
     hub.broadcast("s1", { type: "state", version: 9 }); // lost
     hub.setOnline(true);
     expect(statuses).toEqual(["connected", "disconnected", "connected"]);
+  });
+});
+
+describe("signed broadcasts", () => {
+  it("verifies what the key signed and nothing else", async () => {
+    const { privateKey, publicKey } = await generateSigningKeys();
+    const other = await generateSigningKeys();
+    const sig = await signText(privateKey, '{"version":3}');
+    expect(await verifyText(publicKey, '{"version":3}', sig)).toBe(true);
+    expect(await verifyText(publicKey, '{"version":4}', sig)).toBe(false);
+    expect(await verifyText(other.publicKey, '{"version":3}', sig)).toBe(false);
+    expect(await verifyText(publicKey, '{"version":3}', "not-a-signature")).toBe(false);
+  });
+
+  it("derives the same server key from the same secret, and a different one otherwise", async () => {
+    const a = deriveLiveKeyPair("x".repeat(40));
+    expect(deriveLiveKeyPair("x".repeat(40))).toEqual(a);
+    expect(deriveLiveKeyPair("y".repeat(40)).x).not.toBe(a.x);
+    const sig = await signText(await importSigningKey(a), "halo");
+    expect(await verifyText({ kty: "EC", crv: "P-256", x: a.x, y: a.y }, "halo", sig)).toBe(true);
+  });
+
+  it("keeps signed data on the event, within limits", () => {
+    expect(parseLiveEvent("state", { version: 2, data: "{}", sig: "abc" })).toEqual({
+      type: "state",
+      version: 2,
+      signed: { data: "{}", sig: "abc" },
+    });
+    expect(
+      parseLiveEvent("state", { version: 2, data: "x".repeat(MAX_SIGNED_BYTES + 1), sig: "abc" }),
+    ).toEqual({ type: "state", version: 2 });
+    expect(parseLiveEvent("state", { version: 2, data: 5, sig: "abc" })).toEqual({
+      type: "state",
+      version: 2,
+    });
   });
 });

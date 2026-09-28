@@ -95,6 +95,11 @@ function baseView(
  * While the round is open, a participant's score, rank and streak are shown as they were
  * before it: the new numbers would tell them whether they got it right.
  */
+/** The part of the state every phone shares (what the server signs and broadcasts). */
+export function sharedView(raw: RawLiveState, snapshot: Snapshot, now = Date.now()): LiveView {
+  return baseView(raw, snapshot, null, now);
+}
+
 export function playerView(
   raw: RawLiveState,
   snapshot: Snapshot,

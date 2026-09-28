@@ -153,7 +153,7 @@ Satu channel per sesi: `session:{sessionId}`.
 | **Presence**                   | Tanda online peserta di lobby dan layar host                                                   |
 
 - Broadcast dikirim dari server, lewat Server Action setelah transaksi DB berhasil (REST, tanpa socket di server). Klien tidak mengirim event game.
-- Channel-nya publik karena peserta tidak punya akun Supabase, jadi semua event bersifat **petunjuk**: klien yang menerima event, baru terhubung, atau reconnect selalu mengambil state lengkap dari server (RPC `live_state` lewat Server Action). Event palsu hanya memicu satu fetch tambahan.
+- Channel-nya publik karena peserta tidak punya akun Supabase. Karena itu state bersama yang di-broadcast **ditandatangani server** (ECDSA P-256) dan diverifikasi HP sebelum dipakai; event tanpa tanda tangan yang sah hanya petunjuk untuk mengambil state lewat Server Action (RPC `live_state`). Klien yang baru terhubung atau reconnect selalu mengambil state lengkap. Detail: [09 · Realtime](09-mode-live.md#realtime-sessionid).
 - Timer mengikuti jam server: klien mengukur selisih jam lewat `GET /api/time` (median beberapa ping).
 - `src/engine/transport/` membungkus Supabase Realtime. Kalau nanti skala menuntut server game khusus (PartyKit, Durable Objects, Colyseus), cukup lapisan ini yang diganti.
 

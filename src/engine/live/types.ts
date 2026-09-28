@@ -116,11 +116,15 @@ export type YouView = {
   /** Whether they answered the current round, and what (their own answer only). */
   answered: boolean;
   answer: unknown;
-  /** How it went — only from the reveal on. */
-  result: { ratio: number; points: number } | null;
+  /** How it went — only from the reveal on (points null until the server sent them). */
+  result: { ratio: number; points: number | null } | null;
 };
 
-export type PlayerView = LiveView & { you: YouView };
+export type PlayerView = LiveView & {
+  you: YouView;
+  /** Built from a signed broadcast: the personal numbers may still be the old ones. */
+  partial?: boolean;
+};
 
 export type RosterEntry = { id: string; nickname: string };
 
