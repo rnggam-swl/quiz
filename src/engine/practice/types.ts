@@ -97,6 +97,12 @@ export type PlayError =
   | "not_on_roster"
   | "login_required"
   | "not_open_yet"
+  // Live (P5)
+  | "lobby_locked"
+  | "late_join_closed"
+  | "kicked"
+  | "spectator"
+  | "round_closed"
   | "network";
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; error: PlayError };

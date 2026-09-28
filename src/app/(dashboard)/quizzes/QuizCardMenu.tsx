@@ -1,6 +1,14 @@
 "use client";
 
-import { BarChart3, ClipboardCheck, Copy, Ellipsis, Pencil, Trash2 } from "lucide-react";
+import {
+  BarChart3,
+  ClipboardCheck,
+  Copy,
+  Ellipsis,
+  MonitorPlay,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
@@ -43,6 +51,11 @@ export function QuizCardMenu({ quizId, title }: { quizId: string; title: string 
           <DropdownMenuItem asChild>
             <Link href={`/quizzes/${quizId}/exams`}>
               <ClipboardCheck /> Ujian
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/quizzes/${quizId}/live`}>
+              <MonitorPlay /> Live
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem

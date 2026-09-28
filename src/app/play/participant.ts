@@ -9,7 +9,7 @@ import { verifyParticipantToken } from "@/lib/participant-token";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Tables } from "@/lib/supabase/database.types";
 
-// Helpers shared by the participant Server Actions (practice and exam). They live
+// Helpers shared by the participant Server Actions (practice, exam and live). They live
 // outside the "use server" files so they don't become callable endpoints themselves.
 
 export const uuid = z.uuid();
@@ -21,6 +21,11 @@ const RPC_ERRORS = [
   "already_answered",
   "deadline_passed",
   "not_on_roster",
+  "lobby_locked",
+  "late_join_closed",
+  "kicked",
+  "spectator",
+  "round_closed",
 ] as const;
 
 /** RPC exceptions (supabase/migrations) → player errors. */

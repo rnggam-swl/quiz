@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { isSessionOpen, loadSessionByCode, playInfo } from "@/engine/practice/server";
 
+import { LivePlayClient } from "./LivePlayClient";
 import { PlayClient } from "./PlayClient";
 
 export const metadata: Metadata = { title: "Main" };
@@ -32,5 +33,8 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
     );
   }
 
+  if (ctx.session.mode === "live") {
+    return <LivePlayClient sessionId={ctx.session.id} title={ctx.snapshot.quiz.title} />;
+  }
   return <PlayClient sessionId={ctx.session.id} info={playInfo(ctx)} />;
 }

@@ -49,6 +49,10 @@ export const policySchema = z.object({
     logTabSwitch: z.boolean(),
     blockCopyPaste: z.boolean(),
   }),
+  /** Live: move on by itself after the reveal and the leaderboard. */
+  autoAdvance: z.boolean(),
+  /** Live: joining after the first question — play, only watch, or not at all. */
+  lateJoin: z.enum(["allow", "spectator", "deny"]),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -67,6 +71,8 @@ const PRACTICE: Policy = {
   navigation: "free",
   attemptScoring: "highest",
   integrity: { fullscreen: false, logTabSwitch: false, blockCopyPaste: false },
+  autoAdvance: false,
+  lateJoin: "allow",
 };
 
 /** Defaults per mode; later phases fill in their own (exam P4, live P5, battle P6–P7). */

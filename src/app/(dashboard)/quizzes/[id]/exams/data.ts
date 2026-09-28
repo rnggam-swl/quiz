@@ -53,7 +53,7 @@ type Supabase = HostExam["supabase"];
 const PAGE = 1000;
 
 /** Every row of a query, page by page (PostgREST caps a response at 1000 rows). */
-async function all<T>(
+export async function all<T>(
   page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const rows: T[] = [];
