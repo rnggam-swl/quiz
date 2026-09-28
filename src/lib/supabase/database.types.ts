@@ -90,6 +90,50 @@ export type Database = {
           },
         ]
       }
+      battle_rounds: {
+        Row: {
+          closes_at: string | null
+          id: string
+          idx: number
+          locked_at: string | null
+          opened_at: string | null
+          question_id: string
+          session_id: string
+          status: Database["public"]["Enums"]["round_status"]
+          time_limit_ms: number
+        }
+        Insert: {
+          closes_at?: string | null
+          id?: string
+          idx: number
+          locked_at?: string | null
+          opened_at?: string | null
+          question_id: string
+          session_id: string
+          status?: Database["public"]["Enums"]["round_status"]
+          time_limit_ms: number
+        }
+        Update: {
+          closes_at?: string | null
+          id?: string
+          idx?: number
+          locked_at?: string | null
+          opened_at?: string | null
+          question_id?: string
+          session_id?: string
+          status?: Database["public"]["Enums"]["round_status"]
+          time_limit_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "battle_rounds_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrity_events: {
         Row: {
           at: string
@@ -126,31 +170,43 @@ export type Database = {
         Row: {
           external_id: string | null
           id: string
+          is_spectator: boolean
           joined_at: string
+          kicked_at: string | null
           last_seen_at: string | null
           nickname: string
           roster_id: string | null
+          score: number
           session_id: string
+          streak: number
           user_id: string | null
         }
         Insert: {
           external_id?: string | null
           id?: string
+          is_spectator?: boolean
           joined_at?: string
+          kicked_at?: string | null
           last_seen_at?: string | null
           nickname: string
           roster_id?: string | null
+          score?: number
           session_id: string
+          streak?: number
           user_id?: string | null
         }
         Update: {
           external_id?: string | null
           id?: string
+          is_spectator?: boolean
           joined_at?: string
+          kicked_at?: string | null
           last_seen_at?: string | null
           nickname?: string
           roster_id?: string | null
+          score?: number
           session_id?: string
+          streak?: number
           user_id?: string | null
         }
         Relationships: [
@@ -467,52 +523,85 @@ export type Database = {
       }
       sessions: {
         Row: {
+          auto_advance: boolean
           closes_at: string | null
           code: string | null
           created_at: string
+          current_round: number | null
           host_id: string
           id: string
           is_default: boolean
+          lobby_locked: boolean
           mode: Database["public"]["Enums"]["session_mode"]
           opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
           policy: Json
+          question_ids: string[] | null
           quiz_id: string
           quiz_version_id: string | null
           results_released_at: string | null
+          seed: number | null
+          state_version: number
           status: Database["public"]["Enums"]["session_status"]
           title: string | null
           updated_at: string
         }
         Insert: {
+          auto_advance?: boolean
           closes_at?: string | null
           code?: string | null
           created_at?: string
+          current_round?: number | null
           host_id?: string
           id?: string
           is_default?: boolean
+          lobby_locked?: boolean
           mode: Database["public"]["Enums"]["session_mode"]
           opens_at?: string | null
+          paused_at?: string | null
+          paused_remaining_ms?: number | null
+          phase?: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at?: string | null
+          phase_opened_at?: string | null
           policy?: Json
+          question_ids?: string[] | null
           quiz_id: string
           quiz_version_id?: string | null
           results_released_at?: string | null
+          seed?: number | null
+          state_version?: number
           status?: Database["public"]["Enums"]["session_status"]
           title?: string | null
           updated_at?: string
         }
         Update: {
+          auto_advance?: boolean
           closes_at?: string | null
           code?: string | null
           created_at?: string
+          current_round?: number | null
           host_id?: string
           id?: string
           is_default?: boolean
+          lobby_locked?: boolean
           mode?: Database["public"]["Enums"]["session_mode"]
           opens_at?: string | null
+          paused_at?: string | null
+          paused_remaining_ms?: number | null
+          phase?: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at?: string | null
+          phase_opened_at?: string | null
           policy?: Json
+          question_ids?: string[] | null
           quiz_id?: string
           quiz_version_id?: string | null
           results_released_at?: string | null
+          seed?: number | null
+          state_version?: number
           status?: Database["public"]["Enums"]["session_status"]
           title?: string | null
           updated_at?: string
@@ -546,21 +635,69 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      ensure_practice_session: {
-        Args: { p_policy?: Json; p_quiz_id: string }
+      advance_live: {
+        Args: { p_action: string; p_session_id: string; p_version: number }
         Returns: {
+          auto_advance: boolean
           closes_at: string | null
           code: string | null
           created_at: string
+          current_round: number | null
           host_id: string
           id: string
           is_default: boolean
+          lobby_locked: boolean
           mode: Database["public"]["Enums"]["session_mode"]
           opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
           policy: Json
+          question_ids: string[] | null
           quiz_id: string
           quiz_version_id: string | null
           results_released_at: string | null
+          seed: number | null
+          state_version: number
+          status: Database["public"]["Enums"]["session_status"]
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      ensure_practice_session: {
+        Args: { p_policy?: Json; p_quiz_id: string }
+        Returns: {
+          auto_advance: boolean
+          closes_at: string | null
+          code: string | null
+          created_at: string
+          current_round: number | null
+          host_id: string
+          id: string
+          is_default: boolean
+          lobby_locked: boolean
+          mode: Database["public"]["Enums"]["session_mode"]
+          opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
+          policy: Json
+          question_ids: string[] | null
+          quiz_id: string
+          quiz_version_id: string | null
+          results_released_at: string | null
+          seed: number | null
+          state_version: number
           status: Database["public"]["Enums"]["session_status"]
           title: string | null
           updated_at: string
@@ -575,18 +712,29 @@ export type Database = {
       end_exam: {
         Args: { p_session_id: string }
         Returns: {
+          auto_advance: boolean
           closes_at: string | null
           code: string | null
           created_at: string
+          current_round: number | null
           host_id: string
           id: string
           is_default: boolean
+          lobby_locked: boolean
           mode: Database["public"]["Enums"]["session_mode"]
           opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
           policy: Json
+          question_ids: string[] | null
           quiz_id: string
           quiz_version_id: string | null
           results_released_at: string | null
+          seed: number | null
+          state_version: number
           status: Database["public"]["Enums"]["session_status"]
           title: string | null
           updated_at: string
@@ -666,11 +814,38 @@ export type Database = {
         Returns: {
           external_id: string | null
           id: string
+          is_spectator: boolean
           joined_at: string
+          kicked_at: string | null
           last_seen_at: string | null
           nickname: string
           roster_id: string | null
+          score: number
           session_id: string
+          streak: number
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "participants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      join_live: {
+        Args: { p_nickname: string; p_session_id: string }
+        Returns: {
+          external_id: string | null
+          id: string
+          is_spectator: boolean
+          joined_at: string
+          kicked_at: string | null
+          last_seen_at: string | null
+          nickname: string
+          roster_id: string | null
+          score: number
+          session_id: string
+          streak: number
           user_id: string | null
         }
         SetofOptions: {
@@ -689,11 +864,15 @@ export type Database = {
         Returns: {
           external_id: string | null
           id: string
+          is_spectator: boolean
           joined_at: string
+          kicked_at: string | null
           last_seen_at: string | null
           nickname: string
           roster_id: string | null
+          score: number
           session_id: string
+          streak: number
           user_id: string | null
         }
         SetofOptions: {
@@ -702,6 +881,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      kick_participant: {
+        Args: { p_participant_id: string; p_session_id: string }
+        Returns: undefined
+      }
+      live_state: {
+        Args: { p_participant_id?: string; p_session_id: string }
+        Returns: Json
       }
       log_integrity_events: {
         Args: { p_attempt_id: string; p_events: Json }
@@ -715,6 +902,17 @@ export type Database = {
           slug: string
           version: number
         }[]
+      }
+      record_live_answer: {
+        Args: {
+          p_answer: Json
+          p_base_points: number
+          p_correct: number
+          p_participant_id: string
+          p_question_id: string
+          p_total: number
+        }
+        Returns: Json
       }
       record_response: {
         Args: {
@@ -850,9 +1048,65 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_live_settings: {
+        Args: {
+          p_auto_advance?: boolean
+          p_lobby_locked?: boolean
+          p_session_id: string
+        }
+        Returns: {
+          auto_advance: boolean
+          closes_at: string | null
+          code: string | null
+          created_at: string
+          current_round: number | null
+          host_id: string
+          id: string
+          is_default: boolean
+          lobby_locked: boolean
+          mode: Database["public"]["Enums"]["session_mode"]
+          opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
+          policy: Json
+          question_ids: string[] | null
+          quiz_id: string
+          quiz_version_id: string | null
+          results_released_at: string | null
+          seed: number | null
+          state_version: number
+          status: Database["public"]["Enums"]["session_status"]
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       attempt_status: "in_progress" | "submitted" | "expired"
+      live_phase:
+        | "lobby"
+        | "countdown"
+        | "open"
+        | "reveal"
+        | "leaderboard"
+        | "podium"
+        | "ended"
+      round_status:
+        | "pending"
+        | "countdown"
+        | "open"
+        | "resolving"
+        | "locked"
+        | "revealed"
       quiz_visibility: "private" | "unlisted" | "public"
       session_mode:
         | "practice"
@@ -995,6 +1249,23 @@ export const Constants = {
   public: {
     Enums: {
       attempt_status: ["in_progress", "submitted", "expired"],
+      live_phase: [
+        "lobby",
+        "countdown",
+        "open",
+        "reveal",
+        "leaderboard",
+        "podium",
+        "ended",
+      ],
+      round_status: [
+        "pending",
+        "countdown",
+        "open",
+        "resolving",
+        "locked",
+        "revealed",
+      ],
       quiz_visibility: ["private", "unlisted", "public"],
       session_mode: [
         "practice",

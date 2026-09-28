@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, MonitorPlay } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -29,6 +29,11 @@ export function EditorPage({ initial, ownerId }: { initial: EditorInitialState; 
       backHref="/quizzes"
       headerActions={
         <>
+          <Button asChild variant="secondary" aria-label="Live">
+            <Link href={`/quizzes/${initial.quiz.id}/live`}>
+              <MonitorPlay /> <span className="hidden sm:inline">Live</span>
+            </Link>
+          </Button>
           <Button asChild variant="secondary" aria-label="Ujian">
             <Link href={`/quizzes/${initial.quiz.id}/exams`}>
               <ClipboardCheck /> <span className="hidden sm:inline">Ujian</span>

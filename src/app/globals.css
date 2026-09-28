@@ -156,6 +156,28 @@
   --animate-fade-up: fade-up 200ms ease-out both;
   --animate-pop: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-shake: shake 300ms ease-in-out both;
+  /* Leaderboard rows slide from where they stood (--rank-from) to their new place. */
+  --animate-rank-move: rank-move 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-podium: podium-rise 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+
+  @keyframes rank-move {
+    from {
+      transform: translateY(var(--rank-from, 0));
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes podium-rise {
+    from {
+      opacity: 0;
+      transform: translateY(40px) scaleY(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scaleY(1);
+    }
+  }
 
   @keyframes fade-up {
     from {

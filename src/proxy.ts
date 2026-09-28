@@ -6,7 +6,7 @@ import { embedOriginsForSlug } from "@/lib/supabase/embed-lookup";
 import { updateSession } from "@/lib/supabase/proxy";
 
 /** Routes for signed-in hosts. The real check is in the DAL (src/lib/auth.ts); this is the fast path. */
-const HOST_ROUTES = ["/quizzes"];
+const HOST_ROUTES = ["/quizzes", "/host"];
 
 /** Headers every page gets. Embed pages override frame-ancestors per quiz. */
 function secure(response: NextResponse, csp = "frame-ancestors 'self'"): NextResponse {
@@ -47,8 +47,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static files and images.
+  // Everything except static files, images and the clock-sync ping (needs no session).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

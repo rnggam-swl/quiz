@@ -21,7 +21,8 @@
     "db:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts",
     "db:types:local": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
     "prepare": "husky",
-    "embed:demo": "node scripts/embed-demo/serve.mjs"
+    "embed:demo": "node scripts/embed-demo/serve.mjs",
+    "load:live": "node scripts/load-live.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,mts}": [
