@@ -3,9 +3,11 @@ import { gradeAnswer } from "@/engine/practice/attempt";
 import { nicknameSchema } from "@/engine/practice/nickname";
 import type { Snapshot } from "@/engine/practice/snapshot";
 import type { MemoryHub } from "@/engine/transport/memory";
+import { generateSigningKeys } from "@/engine/transport/signing";
 import { createRandom, randomSeed } from "@/lib/seed-random";
 
 import { liveQuestionOrder } from "./form";
+import { signState } from "./signed";
 import {
   ANSWER_GRACE_MS,
   COUNTDOWN_MS,
@@ -23,7 +25,7 @@ import type {
   RawLiveState,
   Standing,
 } from "./types";
-import { hostView, playerView } from "./view";
+import { hostView, playerView, sharedView } from "./view";
 
 type LocalAnswer = {
   answer: unknown;
@@ -84,13 +86,19 @@ export function createLocalLive(
     autoAdvance: policy.autoAdvance,
   };
   const wait = () => new Promise((resolve) => setTimeout(resolve, latencyMs));
+  // Signed like the server's broadcasts, so the playground runs the real phone path.
+  const keys = generateSigningKeys();
   const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
   const active = () => [...players.values()].filter((p) => !p.kicked && !p.spectator);
   const current = () => (s.round === null ? undefined : rounds[s.round]);
 
-  function bump() {
+  function bump(kicked?: string[]) {
     s.version++;
-    hub.broadcast(sessionId, { type: "state", version: s.version });
+    const version = s.version;
+    const view = sharedView(raw(), snapshot);
+    void keys
+      .then(({ privateKey }) => signState(privateKey, { view, ...(kicked && { kicked }) }))
+      .then((signed) => hub.broadcast(sessionId, { type: "state", version, signed }));
   }
 
   function setPhase(phase: LivePhase, closesInMs: number | null) {
@@ -354,7 +362,7 @@ export function createLocalLive(
       await wait();
       const p = players.get(participantId);
       if (p) p.kicked = true;
-      bump();
+      bump([participantId]);
       return { ok: true, view: hostSnapshot() };
     },
   };
@@ -392,6 +400,7 @@ export function createLocalLive(
     player,
     code,
     sessionId,
+    publicKey: keys.then((k) => k.publicKey),
     /** A simulated participant (presence included) who answers choice questions. */
     addBot(nickname: string, skill = 0.7) {
       const p = join(nickname, false);

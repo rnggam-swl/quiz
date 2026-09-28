@@ -66,22 +66,24 @@ poin = round(question.points × ratio × (1 − (waktu_jawab / batas_waktu) / 2)
 
 ## Realtime (`session:{id}`)
 
-Satu channel Supabase Realtime per sesi, publik (peserta tidak punya akun Supabase). Karena siapa pun bisa mengirim pesan ke channel publik, **event hanya petunjuk**:
+Satu channel Supabase Realtime per sesi, publik (peserta tidak punya akun Supabase). Siapa pun bisa mengirim pesan ke channel publik, jadi **tidak ada isi event yang dipercaya tanpa tanda tangan server**:
 
-| Event   | Payload       | Arti                                                                                     |
-| ------- | ------------- | ---------------------------------------------------------------------------------------- |
-| `state` | `{ version }` | State sesi berubah (tahap, kunci lobby, peserta dikeluarkan). Klien mengambil state baru |
+| Event   | Payload                  | Arti                                                                                                  |
+| ------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `state` | `{ version, data, sig }` | State sesi berubah. `data` = state bersama (JSON), `sig` = tanda tangan server atas `data` persis itu |
 
-- State selalu diambil dari server: peserta lewat Server Action `liveStateAction` (RPC `live_state`), host lewat `hostLiveStateAction` (RLS). Event palsu paling banyak menyebabkan satu fetch tambahan.
-- `live_state` berisi tahap, timer, jumlah peserta dan yang sudah menjawab, 5 besar (dengan poin putaran terakhir dan peringkat sebelumnya untuk animasi), dan data peserta (skor, peringkat, streak, jawabannya sendiri).
-- Jumlah yang menjawab diambil host dengan polling 1 detik selama soal terbuka (tidak di-broadcast ke semua peserta).
+- **State bersama** (tahap, timer, soal versi aman, kunci jawaban saat reveal, jumlah peserta/menjawab, 5 besar) sama untuk semua HP. Server Action host menandatanganinya dengan ECDSA P-256 lalu mem-broadcast-nya (`src/engine/live/signed.ts`, `src/engine/transport/signing.ts`).
+- HP memverifikasi tanda tangan dengan kunci publik (diberikan oleh halaman `/play/{code}`), memastikan `sessionId` dan `version` cocok, lalu langsung memakai state itu **tanpa mengambil ulang ke server**. Event yang tidak lolos verifikasi (atau tanpa `data`) dianggap petunjuk: HP mengambil state lewat Server Action. Event palsu paling banyak menyebabkan satu fetch tambahan.
+- **Data pribadi** (poin, skor, peringkat, streak) hanya berubah saat reveal dan di akhir. Saat itu HP mengambil `live_state` miliknya sendiri, dengan jeda acak 0–1 detik agar 200 HP tidak meminta bersamaan. Benar/salah sudah tampil lebih dulu: HP menilai jawabannya sendiri dengan kunci yang ikut di reveal; poinnya menyusul dari server.
+- Kunci tanda tangan diturunkan dari `PARTICIPANT_TOKEN_SECRET` (HKDF dengan label sendiri), jadi semua instance server punya kunci yang sama tanpa secret tambahan (`src/engine/transport/keys.ts`).
+- Host tetap mengambil state-nya sendiri (lewat RLS), plus polling 1 detik selama soal terbuka untuk jumlah yang menjawab. Distribusi jawaban hanya untuk host.
 - Presence: `{ key, nickname, role }`. Hanya dipakai untuk tanda online; daftar peserta tetap dari server.
-- Broadcast dikirim dari Server Action lewat REST (`/realtime/v1/api/broadcast`) setelah transaksi berhasil (`src/engine/transport/broadcast.ts`).
+- Broadcast dikirim dari Server Action lewat REST (`/realtime/v1/api/broadcast`) setelah transaksi berhasil, sebelum host mengambil data tambahannya (`src/engine/transport/broadcast.ts`).
 
 ## Reconnect
 
 - Token peserta ada di `localStorage`; reload membawa peserta ke tahap yang benar.
-- Klien mengambil ulang state saat: terhubung kembali, tab aktif lagi, 2,5 detik setelah timer tahap habis (jaga-jaga event hilang), dan polling (3 detik saat terputus, 20 detik saat tersambung).
+- Klien mengambil ulang state saat: terhubung kembali, tab aktif lagi, 2,5–4,5 detik setelah timer tahap habis (jaga-jaga event hilang; acak agar tidak serentak), dan polling (3 detik saat terputus, 20 detik saat tersambung).
 - Peserta yang terputus saat soal terbuka masih bisa menjawab jika `now() < closes_at + 1 detik`.
 
 ## Sinkronisasi jam
@@ -107,21 +109,30 @@ Satu channel Supabase Realtime per sesi, publik (peserta tidak punya akun Supaba
 ## Batas skala MVP
 
 - Target 200 peserta per sesi.
-- Satu broadcast per perubahan tahap; setiap peserta lalu melakukan satu RPC `live_state`.
+- Satu broadcast bertanda tangan per perubahan tahap; peserta hanya melakukan RPC `live_state` sendiri saat reveal dan di akhir (tersebar 1 detik).
 - Leaderboard hanya mengirim 5 besar, sedangkan peringkat pribadi dihitung per peserta.
 
 ## Uji beban
 
-Skrip `scripts/load-live.mjs` mensimulasikan peserta pada sesi live yang masih di lobby: join, mendengarkan channel, menjawab setiap soal, dan mengambil state setelah setiap event, lewat RPC yang sama dengan Server Action. Host dijalankan dengan akun host sungguhan.
+Skrip `scripts/load-live.mjs` mensimulasikan peserta pada sesi live yang masih di lobby: join, mendengarkan channel, memverifikasi state bertanda tangan, menjawab setiap soal, dan mengambil data pribadi saat reveal/akhir, lewat RPC yang sama dengan Server Action. Host dijalankan dengan akun host sungguhan; skrip menandatangani broadcast dengan kunci yang sama dengan server (butuh `PARTICIPANT_TOKEN_SECRET` di `.env.local`).
 
 ```bash
 LOAD_HOST_EMAIL=… LOAD_HOST_PASSWORD=… pnpm load:live --session <id> --players 200 --rounds 5
 ```
 
-Yang diukur: aksi host → event diterima HP, aksi host → HP selesai mengambil state baru (target p95 < 1 detik), dan latensi jawaban.
+Yang diukur: aksi host → event diterima HP, aksi host → state baru tampil di HP (target p95 < 1 detik), aksi host → poin pribadi setelah reveal, dan latensi jawaban. Pengukuran pertama (di bawah) memakai protokol lama: setiap event membuat semua HP mengambil state.
 
-| Tanggal | Lingkungan | Peserta | Aksi host → event (p95) | Aksi host → state (p95) | Jawaban (p95) |
-| ------- | ---------- | ------- | ----------------------- | ----------------------- | ------------- |
-| –       | –          | –       | belum dijalankan        | –                       | –             |
+| Tanggal    | Lingkungan                                                                                  | Peserta | Aksi host → event (p50 / p95) | Aksi host → state (p50 / p95) | Poin pribadi setelah reveal (p50 / p95) | Jawaban (p50 / p95) |
+| ---------- | ------------------------------------------------------------------------------------------- | ------- | ----------------------------- | ----------------------------- | --------------------------------------- | ------------------- |
+| 2026-09-28 | Supabase cloud (ap-northeast-2, Seoul); generator: satu proses Node di PC lokal (Indonesia) | 200     | 499 ms / 1245 ms              | 1516 ms / 2785 ms             | – (protokol lama)                       | 164 ms / 255 ms     |
+| 2026-09-28 | Sama, protokol baru (state bersama bertanda tangan)                                         | 200     | 665 ms / 952 ms               | 671 ms / 1070 ms              | 1455 ms / 2368 ms                       | 164 ms / 280 ms     |
+
+Catatan (5 soal, 21 perpindahan tahap, 4.200 sampel per metrik):
+
+- **Protokol lama:** setelah setiap event, 200 HP mengambil state bersamaan (`live_state`) dan antre di pool koneksi database, sehingga state baru tampil p95 2,8 detik.
+- **Protokol baru:** state bersama ikut dalam broadcast bertanda tangan, jadi HP tidak perlu mengambilnya. State baru tampil p95 **1,07 detik** (p50 0,67 detik); verifikasi tanda tangan hanya menambah ~6 ms dibanding saat event diterima.
+- Target p95 < 1 detik hampir tercapai di pengukuran ini, dan angkanya masih pesimistis: "aksi host" di skrip berjalan dari PC di Indonesia dan memanggil dua RPC ke Seoul (`advance_live` + `live_state`) sebelum broadcast, sedangkan di produksi Server Action berjalan di Vercel region Seoul (`icn1`) sehingga dua RPC itu hanya beberapa milidetik. Selain itu 200 socket berbagi satu proses Node, sehingga pesan yang diproses belakangan ikut tercatat lebih lambat.
+- Skrip sekarang juga mencatat **broadcast → event di HP** (waktu Realtime saja, tanpa RPC dari PC) supaya pengukuran berikutnya bisa memisahkan keduanya.
+- Poin pribadi setelah reveal sengaja menyusul (jeda acak 0–1 detik + satu fetch); tulisan benar/salah sudah tampil bersama state.
 
 Jangan menjalankan skrip ini pada sesi yang sedang dipakai kelas: skrip menambahkan peserta palsu.

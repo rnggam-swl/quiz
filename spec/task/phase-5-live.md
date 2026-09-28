@@ -35,7 +35,7 @@
 ## Laporan & skala
 
 - [x] **P5-18** Laporan sesi live memakai halaman laporan yang sama + replay leaderboard per soal.
-- [ ] **P5-19** Uji beban: skrip (k6 atau Node) yang mensimulasikan 200 peserta join dan menjawab. Ukur latensi aksi host → layar peserta dan catat hasilnya di `docs/09-mode-live.md`. _(Skrip `pnpm load:live` sudah ada; belum dijalankan terhadap Supabase sungguhan.)_
+- [x] **P5-19** Uji beban: skrip (k6 atau Node) yang mensimulasikan 200 peserta join dan menjawab. Ukur latensi aksi host → layar peserta dan catat hasilnya di `docs/09-mode-live.md`. _(`pnpm load:live`; hasil 2026-09-28 di docs/09: state baru tampil p95 1,07 dtk dari PC lokal ke Supabase Seoul.)_
 
 ## Definition of Done
 

@@ -2,10 +2,9 @@
 
 import { z } from "zod";
 
-import { loadHostView } from "@/engine/live/server";
+import { broadcastShared, hostViewFrom, loadLiveRaw } from "@/engine/live/server";
 import type { HostAction, HostView } from "@/engine/live/types";
 import type { Result } from "@/engine/practice/types";
-import { broadcast } from "@/engine/transport/broadcast";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,20 +22,28 @@ async function hostClient(sessionId: string) {
   return createClient();
 }
 
+/**
+ * The host's view after a change; when the state moved, the phones first get the signed
+ * shared state (in parallel with the host's own extras, so nobody waits on the other).
+ */
 async function viewAfter(
   supabase: Awaited<ReturnType<typeof createClient>>,
   sessionId: string,
-  changedTo: number | null,
+  { changed, kicked }: { changed: boolean; kicked?: string[] } = { changed: false },
 ): Promise<Result<{ view: HostView }>> {
-  if (changedTo !== null) await broadcast(sessionId, { type: "state", version: changedTo });
-  const view = await loadHostView(supabase, sessionId);
-  return view ? { ok: true, view } : { ok: false, error: "not_found" };
+  const loaded = await loadLiveRaw(supabase, sessionId);
+  if (!loaded) return { ok: false, error: "not_found" };
+  const [view] = await Promise.all([
+    hostViewFrom(supabase, sessionId, loaded.raw, loaded.snapshot),
+    changed ? broadcastShared(sessionId, loaded.raw, loaded.snapshot, kicked) : null,
+  ]);
+  return { ok: true, view };
 }
 
 export async function hostLiveStateAction(sessionId: string): Promise<Result<{ view: HostView }>> {
   const supabase = await hostClient(sessionId);
   if (!supabase) return { ok: false, error: "unauthorized" };
-  return viewAfter(supabase, sessionId, null);
+  return viewAfter(supabase, sessionId);
 }
 
 export async function advanceLiveAction(
@@ -55,7 +62,7 @@ export async function advanceLiveAction(
   });
   if (error || !data)
     return { ok: false, error: error?.message.includes("no_questions") ? "invalid" : "not_found" };
-  return viewAfter(supabase, sessionId, data.state_version !== version ? data.state_version : null);
+  return viewAfter(supabase, sessionId, { changed: data.state_version !== version });
 }
 
 export async function liveSettingsAction(
@@ -72,7 +79,7 @@ export async function liveSettingsAction(
     ...(autoAdvance !== undefined && { p_auto_advance: autoAdvance }),
   });
   if (error || !data) return { ok: false, error: "not_found" };
-  return viewAfter(supabase, sessionId, data.state_version);
+  return viewAfter(supabase, sessionId, { changed: true });
 }
 
 export async function kickParticipantAction(
@@ -87,10 +94,5 @@ export async function kickParticipantAction(
     p_participant_id: participantId,
   });
   if (error) return { ok: false, error: "not_found" };
-  const { data } = await supabase
-    .from("sessions")
-    .select("state_version")
-    .eq("id", sessionId)
-    .maybeSingle();
-  return viewAfter(supabase, sessionId, data?.state_version ?? null);
+  return viewAfter(supabase, sessionId, { changed: true, kicked: [participantId] });
 }

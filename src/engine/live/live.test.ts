@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { snapshotFromDraft, type Snapshot } from "@/engine/practice/snapshot";
 import { createMemoryHub } from "@/engine/transport/memory";
+import { generateSigningKeys } from "@/engine/transport/signing";
 import { createQuestion } from "@/questions/question";
 
 import { avatarFor } from "./avatar";
@@ -11,7 +12,8 @@ import { nextStepLabel, timedPhase } from "./phases";
 import { leaderboardReplay, liveStandings } from "./report";
 import { nextStreak, speedPoints, streakBonus } from "./scoring";
 import type { RawLiveState } from "./types";
-import { choiceCounts, hostView, playerView } from "./view";
+import { openSignedState, PERSONAL_PHASES, signState, withYou } from "./signed";
+import { choiceCounts, hostView, playerView, sharedView } from "./view";
 
 function quiz(): Snapshot {
   const mc = {
@@ -269,5 +271,45 @@ describe("local engine", () => {
     expect(await live.player.answer(budi.token, q.id, { selectedIds: ["a"] })).toMatchObject({
       error: "round_closed",
     });
+  });
+});
+
+describe("signed shared state", () => {
+  it("opens only a genuine event for this session and version", async () => {
+    const { privateKey, publicKey } = await generateSigningKeys();
+    const view = sharedView(raw({ phase: "countdown", version: 5 }), quiz());
+    const signed = await signState(privateKey, { view, kicked: ["p9"] });
+    const event = { type: "state" as const, version: 5, signed };
+    expect(await openSignedState(event, publicKey, "s")).toMatchObject({ kicked: ["p9"] });
+    expect(await openSignedState(event, publicKey, "other-session")).toBeNull();
+    expect(await openSignedState({ ...event, version: 6 }, publicKey, "s")).toBeNull();
+    const forged = { ...signed, data: signed.data.replace('"countdown"', '"podium"') };
+    expect(await openSignedState({ ...event, signed: forged }, publicKey, "s")).toBeNull();
+    expect(await openSignedState({ type: "state", version: 5 }, publicKey, "s")).toBeNull();
+    // Nothing a phone may not know yet: the shared view has no answer key before the reveal.
+    expect(signed.data).not.toContain("correctIds");
+  });
+
+  it("builds a phone's view: new round, instant right/wrong at the reveal, kicked", () => {
+    const snapshot = quiz();
+    const prev = playerView(raw(), snapshot)!;
+
+    const next = withYou(prev, sharedView(raw({ phase: "reveal", version: 4 }), snapshot));
+    expect(next.partial).toBe(true);
+    expect(next.you.result).toEqual({ ratio: 1, points: null });
+    expect(next.you.score).toBe(prev.you.score);
+
+    const newRound = withYou(
+      prev,
+      sharedView(
+        raw({ phase: "countdown", round: 1, questionId: "22222222-2222-4222-8222-222222222222" }),
+        snapshot,
+      ),
+    );
+    expect(newRound.you).toMatchObject({ answered: false, answer: null, result: null });
+
+    expect(withYou(prev, sharedView(raw(), snapshot), ["p1"]).you.kicked).toBe(true);
+    expect(PERSONAL_PHASES.has("reveal")).toBe(true);
+    expect(PERSONAL_PHASES.has("open")).toBe(false);
   });
 });

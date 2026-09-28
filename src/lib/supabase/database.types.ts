@@ -672,8 +672,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      ensure_practice_session: {
-        Args: { p_policy?: Json; p_quiz_id: string }
+      end_exam: {
+        Args: { p_session_id: string }
         Returns: {
           auto_advance: boolean
           closes_at: string | null
@@ -709,8 +709,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      end_exam: {
-        Args: { p_session_id: string }
+      ensure_practice_session: {
+        Args: { p_policy?: Json; p_quiz_id: string }
         Returns: {
           auto_advance: boolean
           closes_at: string | null
@@ -886,9 +886,17 @@ export type Database = {
         Args: { p_participant_id: string; p_session_id: string }
         Returns: undefined
       }
+      live_finish: { Args: { p_session_id: string }; Returns: undefined }
       live_state: {
         Args: { p_participant_id?: string; p_session_id: string }
         Returns: Json
+      }
+      live_time_limit_ms: {
+        Args: {
+          p_question_id: string
+          p_session: Database["public"]["Tables"]["sessions"]["Row"]
+        }
+        Returns: number
       }
       log_integrity_events: {
         Args: { p_attempt_id: string; p_events: Json }
@@ -1100,6 +1108,7 @@ export type Database = {
         | "leaderboard"
         | "podium"
         | "ended"
+      quiz_visibility: "private" | "unlisted" | "public"
       round_status:
         | "pending"
         | "countdown"
@@ -1107,7 +1116,6 @@ export type Database = {
         | "resolving"
         | "locked"
         | "revealed"
-      quiz_visibility: "private" | "unlisted" | "public"
       session_mode:
         | "practice"
         | "exam"
@@ -1258,6 +1266,7 @@ export const Constants = {
         "podium",
         "ended",
       ],
+      quiz_visibility: ["private", "unlisted", "public"],
       round_status: [
         "pending",
         "countdown",
@@ -1266,7 +1275,6 @@ export const Constants = {
         "locked",
         "revealed",
       ],
-      quiz_visibility: ["private", "unlisted", "public"],
       session_mode: [
         "practice",
         "exam",

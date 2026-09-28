@@ -3,11 +3,21 @@
  * interface; today it's Supabase Realtime, and a dedicated game server could replace it
  * without touching the players.
  *
- * Events are hints, never state: a client that hears "state moved to version N" fetches
- * the real state from the server. So a forged event costs at most one extra fetch.
+ * Anyone can send to a public channel, so nothing unverified is trusted: an event is
+ * either signed by the server (signing.ts — then its state is used as is) or only a hint
+ * ("state moved to version N") that makes the client fetch the real state. A forged
+ * event costs at most one extra fetch.
  */
 
-export type LiveEvent = { type: "state"; version: number };
+/** Largest signed state accepted from the channel (the broadcast limit is higher). */
+export const MAX_SIGNED_BYTES = 100_000;
+
+export type LiveEvent = {
+  type: "state";
+  version: number;
+  /** The shared state as JSON, and the server's signature over exactly that text. */
+  signed?: { data: string; sig: string };
+};
 
 /** Who's online on a channel (the lobby avatars, "30 online"). */
 export type PresenceMember = { key: string; nickname: string; role: "host" | "player" };
@@ -28,13 +38,19 @@ export type ChannelFactory = (sessionId: string, presenceKey?: string) => Sessio
 
 export const channelTopic = (sessionId: string) => `session:${sessionId}`;
 
-/** Only well-formed hints get through (anyone on the channel can send something). */
+/** Only well-formed events get through (anyone on the channel can send something). */
 export function parseLiveEvent(event: string, payload: unknown): LiveEvent | null {
   if (event !== "state" || !payload || typeof payload !== "object") return null;
-  const version = (payload as { version?: unknown }).version;
-  return typeof version === "number" && Number.isSafeInteger(version) && version >= 0
-    ? { type: "state", version }
-    : null;
+  const { version, data, sig } = payload as { version?: unknown; data?: unknown; sig?: unknown };
+  if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) return null;
+  const signed =
+    typeof data === "string" &&
+    typeof sig === "string" &&
+    data.length <= MAX_SIGNED_BYTES &&
+    sig.length <= 200
+      ? { data, sig }
+      : undefined;
+  return { type: "state", version, ...(signed && { signed }) };
 }
 
 /** Presence entries are client-made too: keep the well-formed ones. */

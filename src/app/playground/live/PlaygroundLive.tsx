@@ -1,7 +1,7 @@
 "use client";
 
 import { Bot, Wifi, WifiOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { HostScreen } from "@/components/live/HostScreen";
 import { LivePlayer } from "@/components/live/LivePlayer";
@@ -10,6 +10,7 @@ import { DEFAULT_LIVE_FORM, livePolicyFrom } from "@/engine/live/form";
 import { createLocalLive } from "@/engine/live/local";
 import { snapshotFromDraft } from "@/engine/practice/snapshot";
 import { createMemoryHub } from "@/engine/transport/memory";
+import type { LivePublicKey } from "@/engine/transport/signing";
 
 import { sampleQuiz } from "../sample";
 
@@ -30,6 +31,10 @@ export function PlaygroundLive({ auto }: { auto: boolean }) {
   });
   const [bots, setBots] = useState(0);
   const [online, setOnline] = useState(true);
+  const [publicKey, setPublicKey] = useState<LivePublicKey | null>(null);
+  useEffect(() => {
+    void live.publicKey.then(setPublicKey);
+  }, [live]);
 
   return (
     <div className="flex min-h-dvh flex-col gap-3 bg-surface-muted p-3">
@@ -83,6 +88,7 @@ export function PlaygroundLive({ auto }: { auto: boolean }) {
               adapter={live.player}
               openChannel={hub.open}
               storageKey={null}
+              publicKey={publicKey}
               measureClock={false}
             />
           </section>

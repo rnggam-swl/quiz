@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LivePhase } from "@/engine/live/types";
 import type { PlayError, Result } from "@/engine/practice/types";
 import { measureClockOffset } from "@/engine/transport/clock";
-import type { ChannelStatus, SessionChannel } from "@/engine/transport/types";
+import type { ChannelStatus, LiveEvent, SessionChannel } from "@/engine/transport/types";
 
 // ─── Clock ─────────────────────────────────────────────────────────────────────
 
@@ -64,8 +64,14 @@ export function useLiveState<V extends Versioned>({
   channel,
   pollMs,
   onError,
+  fromEvent,
 }: {
   fetchState: () => Promise<Result<{ view: V }>>;
+  /**
+   * The new view carried by an event (verified signed state), or null to fetch it.
+   * Without it, every event is only a hint.
+   */
+  fromEvent?: (event: LiveEvent, current: V | null) => Promise<V | null>;
   channel: SessionChannel | null;
   pollMs: (view: V | null, connected: boolean) => number | null;
   onError?: (error: PlayError) => void;
@@ -77,10 +83,12 @@ export function useLiveState<V extends Versioned>({
   const again = useRef(false);
   const fetchRef = useRef(fetchState);
   const errorRef = useRef(onError);
+  const fromEventRef = useRef(fromEvent);
   useEffect(() => {
     fetchRef.current = fetchState;
     errorRef.current = onError;
-  }, [fetchState, onError]);
+    fromEventRef.current = fromEvent;
+  }, [fetchState, onError, fromEvent]);
 
   const setView = useCallback((next: V) => {
     const current = viewRef.current;
@@ -112,8 +120,12 @@ export function useLiveState<V extends Versioned>({
     void refresh();
     if (!channel) return;
     let wasDown = false;
-    const offEvent = channel.onEvent((event) => {
-      if (!viewRef.current || event.version > viewRef.current.version) void refresh();
+    const offEvent = channel.onEvent(async (event) => {
+      const current = viewRef.current;
+      if (current && event.version <= current.version) return;
+      const carried = await fromEventRef.current?.(event, current).catch(() => null);
+      if (carried) setView(carried);
+      else void refresh();
     });
     const offStatus = channel.onStatus((status: ChannelStatus) => {
       setConnected(status === "connected");
@@ -127,7 +139,7 @@ export function useLiveState<V extends Versioned>({
       offEvent();
       offStatus();
     };
-  }, [channel, refresh]);
+  }, [channel, refresh, setView]);
 
   // Back to the tab (phones lock their screens all the time).
   useEffect(() => {
@@ -148,7 +160,8 @@ export function useLiveState<V extends Versioned>({
   }, [interval, refresh]);
   useEffect(() => {
     if (!closesAt) return;
-    const ms = Date.parse(closesAt) - Date.now() + 2500;
+    // Spread over two seconds so a room full of phones doesn't fetch in the same instant.
+    const ms = Date.parse(closesAt) - Date.now() + 2500 + Math.random() * 2000;
     if (ms <= 0 || ms > 15 * 60_000) return;
     const timer = setTimeout(() => void refresh(), ms);
     return () => clearTimeout(timer);

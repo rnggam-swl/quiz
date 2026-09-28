@@ -4,8 +4,13 @@ import { loadSnapshot } from "@/engine/practice/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 
+import type { Snapshot } from "@/engine/practice/snapshot";
+import { broadcast } from "@/engine/transport/broadcast";
+import { liveSigningKey } from "@/engine/transport/keys";
+
+import { signState } from "./signed";
 import type { HostView, PlayerView, RawLiveState } from "./types";
-import { hostView, playerView, type LiveAnswer } from "./view";
+import { hostView, playerView, sharedView, type LiveAnswer } from "./view";
 
 type HostClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -24,20 +29,25 @@ export async function loadPlayerView(
   return snapshot ? playerView(raw, snapshot) : null;
 }
 
-/**
- * The projector's view. Runs as the host (RLS): another host's session reads as null.
- * The lobby adds the participant list, the reveal adds everyone's answers.
- */
-export async function loadHostView(
+/** live_state() as the host (RLS: another host's session reads as null) + its snapshot. */
+export async function loadLiveRaw(
   supabase: HostClient,
   sessionId: string,
-): Promise<HostView | null> {
+): Promise<{ raw: RawLiveState; snapshot: Snapshot } | null> {
   const { data } = await supabase.rpc("live_state", { p_session_id: sessionId });
   const raw = data as RawLiveState | null;
   if (!raw) return null;
   const snapshot = await loadSnapshot(raw.versionId);
-  if (!snapshot) return null;
+  return snapshot ? { raw, snapshot } : null;
+}
 
+/** The projector's view: the lobby adds the participant list, the reveal everyone's answers. */
+export async function hostViewFrom(
+  supabase: HostClient,
+  sessionId: string,
+  raw: RawLiveState,
+  snapshot: Snapshot,
+): Promise<HostView> {
   let roster: HostView["roster"] = [];
   if (raw.phase === "lobby") {
     const { data: rows } = await supabase
@@ -63,6 +73,20 @@ export async function loadHostView(
     answers = (rows ?? []).map((r) => ({ answer: r.answer, correct: r.correct, total: r.total }));
   }
   return hostView(raw, snapshot, { roster, answers });
+}
+
+/** Sign the shared state and broadcast it: the phones use it without fetching. */
+export async function broadcastShared(
+  sessionId: string,
+  raw: RawLiveState,
+  snapshot: Snapshot,
+  kicked?: string[],
+): Promise<void> {
+  const signed = await signState(await liveSigningKey(), {
+    view: sharedView(raw, snapshot),
+    ...(kicked?.length && { kicked }),
+  });
+  await broadcast(sessionId, { type: "state", version: raw.version, signed });
 }
 
 // A session's published version never changes, so answering needn't look it up again.

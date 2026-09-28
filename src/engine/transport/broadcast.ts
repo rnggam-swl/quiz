@@ -2,13 +2,14 @@ import "server-only";
 
 import { getServerEnv } from "@/lib/env.server";
 
-import { channelTopic, type LiveEvent } from "./types";
+import { channelTopic, MAX_SIGNED_BYTES, type LiveEvent } from "./types";
 
 /**
- * Tell everyone on a session's channel that its state moved (P5-02). Called by Server
- * Actions after their transaction committed, over Realtime's REST endpoint so the
- * server never holds a socket. Best effort: clients also refetch on reconnect, when
- * the tab comes back, and on a slow poll, so a lost broadcast only delays them.
+ * Tell everyone on a session's channel that its state moved (P5-02), with the signed
+ * shared state when there is one. Called by Server Actions after their transaction
+ * committed, over Realtime's REST endpoint so the server never holds a socket. Best
+ * effort: clients also refetch on reconnect, when the tab comes back, and on a slow poll,
+ * so a lost broadcast only delays them.
  */
 export async function broadcast(sessionId: string, event: LiveEvent): Promise<boolean> {
   const env = getServerEnv();
@@ -25,7 +26,15 @@ export async function broadcast(sessionId: string, event: LiveEvent): Promise<bo
           {
             topic: channelTopic(sessionId),
             event: event.type,
-            payload: { version: event.version },
+            payload: {
+              version: event.version,
+              // Too big to be worth sending: the phones fetch it instead.
+              ...(event.signed &&
+                event.signed.data.length <= MAX_SIGNED_BYTES && {
+                  data: event.signed.data,
+                  sig: event.signed.sig,
+                }),
+            },
             private: false,
           },
         ],

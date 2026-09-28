@@ -11,11 +11,13 @@ import { QuestionView, answersOnTap } from "@/components/player/QuestionView";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toast";
+import { openSignedState, PERSONAL_PHASES, withYou } from "@/engine/live/signed";
 import type { LivePlayerAdapter, PlayerView } from "@/engine/live/types";
 import { NICKNAME_MAX } from "@/engine/practice/nickname";
 import type { PlayError, PlayQuestion } from "@/engine/practice/types";
 import { msUntil } from "@/engine/transport/clock";
-import type { ChannelFactory } from "@/engine/transport/types";
+import type { LivePublicKey } from "@/engine/transport/signing";
+import type { ChannelFactory, LiveEvent } from "@/engine/transport/types";
 import { cn } from "@/lib/cn";
 import { playSound } from "@/lib/sound";
 
@@ -33,6 +35,7 @@ const JOIN_ERRORS: Partial<Record<PlayError, string>> = {
 };
 
 const SHOW_QUESTION_KEY = "quiz:live:show-question";
+const PERSONAL_SPREAD_MS = 1000;
 
 function readStorage(key: string): string | null {
   try {
@@ -62,6 +65,7 @@ export function LivePlayer({
   adapter,
   openChannel,
   storageKey,
+  publicKey,
   measureClock = true,
 }: {
   sessionId: string;
@@ -70,6 +74,8 @@ export function LivePlayer({
   openChannel: ChannelFactory;
   /** localStorage key for the participant token (null = don't persist). */
   storageKey: string | null;
+  /** Checks the server's signed broadcasts; without it every event means a fetch. */
+  publicKey: LivePublicKey | null;
   measureClock?: boolean;
 }) {
   // undefined = not read yet (storage only exists in the browser).
@@ -111,6 +117,7 @@ export function LivePlayer({
       token={token}
       adapter={adapter}
       openChannel={openChannel}
+      publicKey={publicKey}
       measureClock={measureClock}
       onForget={forget}
     />
@@ -182,6 +189,7 @@ function Game({
   token,
   adapter,
   openChannel,
+  publicKey,
   measureClock,
   onForget,
 }: {
@@ -189,6 +197,7 @@ function Game({
   token: string;
   adapter: LivePlayerAdapter;
   openChannel: ChannelFactory;
+  publicKey: LivePublicKey | null;
   measureClock: boolean;
   onForget: () => void;
 }) {
@@ -201,13 +210,33 @@ function Game({
     },
     [onForget],
   );
+  // A verified broadcast carries the new state: no need to ask the server for it.
+  const fromEvent = useCallback(
+    async (event: LiveEvent, current: PlayerView | null) => {
+      if (!publicKey || !current) return null;
+      const state = await openSignedState(event, publicKey, sessionId);
+      return state ? withYou(current, state.view, state.kicked) : null;
+    },
+    [publicKey, sessionId],
+  );
   const { view, refresh, connected } = useLiveState<PlayerView>({
     fetchState,
     channel,
     // Events do the work while connected; the slow poll only catches lost ones.
     pollMs: (_, isConnected) => (isConnected ? 20_000 : 3000),
     onError,
+    fromEvent,
   });
+
+  // Points, score and rank change at the reveal (and the end): fetch them then, spread
+  // over a second so the whole room doesn't ask at once.
+  const needsYou = !!view?.partial && PERSONAL_PHASES.has(view.phase);
+  const version = view?.version;
+  useEffect(() => {
+    if (!needsYou) return;
+    const timer = setTimeout(() => void refresh(), Math.random() * PERSONAL_SPREAD_MS);
+    return () => clearTimeout(timer);
+  }, [needsYou, version, refresh]);
 
   const you = view?.you;
   useEffect(() => {
@@ -352,13 +381,13 @@ function Game({
           <Center>
             <Trophy className="size-12 text-warning" aria-hidden />
             <p className="text-lg text-fg-muted">Peringkatmu</p>
-            <p className="text-6xl font-bold tabular-nums">#{you.rank}</p>
+            <p className="text-6xl font-bold tabular-nums">#{you.rank ?? "…"}</p>
             <p className="text-xl font-semibold tabular-nums">{you.score} poin</p>
           </Center>
         ) : view.phase === "podium" || view.phase === "ended" ? (
           <Center>
             <p className="text-lg text-fg-muted">Peringkat akhir</p>
-            <p className="text-6xl font-bold tabular-nums">#{you.rank}</p>
+            <p className="text-6xl font-bold tabular-nums">#{you.rank ?? "…"}</p>
             <p className="text-xl font-semibold tabular-nums">{you.score} poin</p>
             {you.rank !== null && you.rank <= 3 && (
               <p className="text-2xl">{["🥇", "🥈", "🥉"][you.rank - 1]}</p>
@@ -553,7 +582,11 @@ function RevealCard({ view }: { view: PlayerView }) {
           {tone.emoji}
         </span>
         <p className="text-3xl font-bold">{tone.title}</p>
-        {result && <p className="text-xl font-semibold tabular-nums">+{result.points} poin</p>}
+        {result && (
+          <p className="text-xl font-semibold tabular-nums">
+            {result.points === null ? "Menghitung poin…" : `+${result.points} poin`}
+          </p>
+        )}
       </div>
       {(you.streak ?? 0) >= 2 && (
         <p className="flex items-center gap-1 font-semibold text-warning">
@@ -561,7 +594,8 @@ function RevealCard({ view }: { view: PlayerView }) {
         </p>
       )}
       <p className="text-fg-muted">
-        Peringkat <strong className="text-fg tabular-nums">#{you.rank}</strong> · {you.score} poin
+        Peringkat <strong className="text-fg tabular-nums">#{you.rank ?? "…"}</strong> · {you.score}{" "}
+        poin
       </p>
     </Center>
   );
