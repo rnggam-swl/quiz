@@ -470,6 +470,7 @@ export type Database = {
       }
       quizzes: {
         Row: {
+          copied_from: string | null
           cover_url: string | null
           created_at: string
           description: string
@@ -486,6 +487,7 @@ export type Database = {
           visibility: Database["public"]["Enums"]["quiz_visibility"]
         }
         Insert: {
+          copied_from?: string | null
           cover_url?: string | null
           created_at?: string
           description?: string
@@ -502,6 +504,7 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["quiz_visibility"]
         }
         Update: {
+          copied_from?: string | null
           cover_url?: string | null
           created_at?: string
           description?: string
@@ -518,6 +521,13 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["quiz_visibility"]
         }
         Relationships: [
+          {
+            foreignKeyName: "quizzes_copied_from_fkey"
+            columns: ["copied_from"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "quizzes_owner_id_fkey"
             columns: ["owner_id"]
@@ -946,6 +956,7 @@ export type Database = {
           url: string
         }[]
       }
+      copy_library_quiz: { Args: { p_quiz_id: string }; Returns: string }
       end_exam: {
         Args: { p_session_id: string }
         Returns: {
@@ -1178,6 +1189,22 @@ export type Database = {
       kick_participant: {
         Args: { p_participant_id: string; p_session_id: string }
         Returns: undefined
+      }
+      library_quiz: { Args: { p_quiz_id: string }; Returns: Json }
+      library_quizzes: {
+        Args: { p_limit?: number; p_offset?: number; p_query?: string }
+        Returns: {
+          author: string
+          copies: number
+          cover_url: string
+          description: string
+          id: string
+          published_at: string
+          question_count: number
+          theme: Json
+          title: string
+          total: number
+        }[]
       }
       live_finish: { Args: { p_session_id: string }; Returns: undefined }
       live_state: {

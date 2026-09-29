@@ -18,6 +18,9 @@ export function HostHeader({ email }: { email: string | null }) {
           <Link href="/quizzes" className="font-medium text-fg">
             Quiz saya
           </Link>
+          <Link href="/library" className="ml-4 font-medium text-fg-muted hover:text-fg">
+            Library
+          </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {email && (

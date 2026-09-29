@@ -22,8 +22,10 @@ import {
   rotateEmbedSecretAction,
   updateEmbedOriginsAction,
   updatePracticeSettingsAction,
+  updateVisibilityAction,
   type PracticeSettings,
   type ShareState,
+  type Visibility,
 } from "../../share-actions";
 
 const tabClass =
@@ -98,6 +100,9 @@ function ShareBody({ quizId }: { quizId: string }) {
         <Tabs.Trigger value="embed" className={tabClass}>
           Embed
         </Tabs.Trigger>
+        <Tabs.Trigger value="library" className={tabClass}>
+          Library
+        </Tabs.Trigger>
       </Tabs.List>
       <Tabs.Content value="link">
         <LinkTab
@@ -111,6 +116,13 @@ function ShareBody({ quizId }: { quizId: string }) {
           quizId={quizId}
           state={state}
           onChange={(patch) => setState({ ...state, ...patch })}
+        />
+      </Tabs.Content>
+      <Tabs.Content value="library">
+        <LibraryTab
+          quizId={quizId}
+          visibility={state.visibility}
+          onChange={(visibility) => setState({ ...state, visibility })}
         />
       </Tabs.Content>
     </Tabs.Root>
@@ -312,6 +324,11 @@ function EmbedTab({
         <CopyField label="Snippet script" value={scriptSnippet} multiline />
         <span className="text-sm font-medium">Atau iframe langsung</span>
         <CopyField label="Snippet iframe" value={iframeSnippet} multiline />
+        <span className="text-sm font-medium">Atau tempel link di WordPress, Notion, dll.</span>
+        <CopyField label="Link embed (oEmbed)" value={`${appOrigin}/embed/${slug}`} />
+        <p className="text-xs text-fg-subtle">
+          WordPress butuh plugin Quiz Embed agar quiz tidak dibatasi (lihat dokumentasi embed).
+        </p>
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
@@ -347,6 +364,95 @@ function EmbedTab({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const VISIBILITY: { value: Visibility; label: string; body: string }[] = [
+  {
+    value: "private",
+    label: "Pribadi",
+    body: "Hanya kamu. Peserta tetap bisa bermain lewat link dan kode.",
+  },
+  {
+    value: "unlisted",
+    label: "Dengan link",
+    body: "Tidak muncul di library, tapi siapa pun yang punya link library bisa melihat dan menyalinnya.",
+  },
+  {
+    value: "public",
+    label: "Publik di library",
+    body: "Muncul di pencarian library. Guru lain bisa melihat soal dan menyalinnya ke akun mereka.",
+  },
+];
+
+function LibraryTab({
+  quizId,
+  visibility,
+  onChange,
+}: {
+  quizId: string;
+  visibility: Visibility;
+  onChange: (visibility: Visibility) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+
+  function choose(next: Visibility) {
+    startTransition(async () => {
+      const result = await updateVisibilityAction(quizId, next);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      onChange(result.visibility);
+      toast.success(
+        next === "public"
+          ? "Quiz muncul di library."
+          : next === "unlisted"
+            ? "Quiz bisa dilihat lewat link."
+            : "Quiz tidak dibagikan ke library.",
+      );
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <fieldset className="flex flex-col gap-2" disabled={pending}>
+        <legend className="mb-1 text-sm font-medium">
+          Siapa yang bisa melihat dan menyalin soal?
+        </legend>
+        {VISIBILITY.map((option) => (
+          <label
+            key={option.value}
+            className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
+          >
+            <input
+              type="radio"
+              name="visibility"
+              value={option.value}
+              checked={visibility === option.value}
+              onChange={() => choose(option.value)}
+              className="mt-1 accent-accent"
+            />
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">{option.label}</span>
+              <span className="text-xs text-fg-muted">{option.body}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {visibility !== "private" && (
+        <>
+          <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
+            Salinan berisi kunci jawaban. Jangan bagikan quiz yang dipakai untuk ujian.
+          </p>
+          <CopyField label="Link library" value={`${origin}/library/${quizId}`} />
+          <p className="text-xs text-fg-subtle">
+            Library selalu menampilkan versi terbit terakhir, bukan draf yang sedang diedit.
+          </p>
+        </>
+      )}
     </div>
   );
 }
