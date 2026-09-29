@@ -48,8 +48,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except static files, images, and the public APIs that need no session: the
-  // clock-sync ping and oEmbed.
+  // clock-sync ping, oEmbed and the token-authenticated REST API.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

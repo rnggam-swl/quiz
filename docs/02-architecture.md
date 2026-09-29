@@ -159,6 +159,25 @@ Satu channel per sesi: `session:{sessionId}`.
 - Timer mengikuti jam server: klien mengukur selisih jam lewat `GET /api/time` (median beberapa ping).
 - `src/engine/transport/` membungkus Supabase Realtime. Kalau nanti skala menuntut server game khusus (PartyKit, Durable Objects, Colyseus), cukup lapisan ini yang diganti.
 
+## API REST
+
+✅ P8-07. API **hanya baca** untuk mengambil hasil dari sistem lain (LMS, spreadsheet, dasbor sekolah). Belum ada konsep workspace, jadi satu akun host = satu workspace: token bisa membaca semua quiz milik akun pembuatnya.
+
+- **Token** dibuat di **Akun → Integrasi** (`/account/integrations`): `qz_` + 32 byte acak (base64url). Yang disimpan hanya SHA-256-nya (`api_tokens.token_hash`) dan 10 karakter awal (`prefix`) untuk ditampilkan. Token hanya ditampilkan sekali. Masa berlaku 30/90/365 hari atau tanpa batas, bisa dicabut kapan saja, maksimal 20 token aktif.
+- **Autentikasi:** `Authorization: Bearer qz_…`. Route meng-hash token lalu memanggil `api_authenticate(hash)` (`service_role`), yang mengembalikan pemilik token aktif dan mencatat `last_used_at` (paling sering sekali per menit).
+- **Otorisasi di database:** route tidak pernah membaca tabel langsung dengan secret key. Semua data diambil lewat `api_quizzes` / `api_quiz` / `api_attempts` / `api_attempt`, yang menerima `p_owner` dan menyaring sendiri berdasarkan `quizzes.owner_id`. Quiz milik orang lain → `null` → 404 (tidak dibedakan dari quiz yang tidak ada). Diuji di [`supabase/tests/api.test.ts`](../supabase/tests/api.test.ts).
+
+| Endpoint                            | Isi                                                                                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/quizzes`               | Semua quiz (maks. 1000): judul, slug, visibilitas, versi terakhir, jumlah soal                                                                                 |
+| `GET /api/v1/quizzes/{id}`          | Quiz + soal dari versi terakhir (id, tipe, pertanyaan, poin; **tanpa kunci jawaban**) + daftar sesi dan jumlah peserta                                         |
+| `GET /api/v1/quizzes/{id}/attempts` | Attempt, terlama dulu. Query: `session`, `status` (`in_progress`/`submitted`/`expired`), `since` (ISO, `started_at ≥`), `limit` (1–500, default 100), `cursor` |
+| `GET /api/v1/attempts/{id}`         | Satu attempt + jawaban per soal (jawaban, benar/total, poin, waktu, komentar guru)                                                                             |
+
+- Respons: `{ data }`, daftar attempt `{ data, next_cursor }` (ulangi dengan `cursor=next_cursor` sampai `null`; cursor = `(started_at, id)` baris terakhir, jadi tidak ada yang terlewat walaupun ada attempt baru). Error: `{ error: { code, message } }` dengan 400/401/404/500. `Cache-Control: no-store`.
+- Peserta dikenali lewat `participant.external_id` (dari embed token) atau `user_id` (ujian dengan login).
+- Belum ada rate limit per token (Vercel serverless tidak punya memori bersama). Jika dibutuhkan, tambahkan hitungan per menit di Postgres atau Upstash.
+
 ## Versi quiz
 
 Quiz yang di-publish menghasilkan baris `quiz_versions` berisi snapshot JSON semua soal. Sesi selalu menunjuk ke satu versi. Akibatnya:

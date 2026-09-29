@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          owner_id: string
+          prefix: string
+          revoked_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          owner_id?: string
+          prefix: string
+          revoked_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          owner_id?: string
+          prefix?: string
+          revoked_at?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_tokens_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attempts: {
         Row: {
           attempt_no: number
@@ -766,6 +810,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      api_attempt: {
+        Args: { p_attempt_id: string; p_owner: string }
+        Returns: Json
+      }
+      api_attempts: {
+        Args: {
+          p_after_id?: string
+          p_after_started?: string
+          p_limit?: number
+          p_owner: string
+          p_quiz_id: string
+          p_session_id?: string
+          p_since?: string
+          p_status?: Database["public"]["Enums"]["attempt_status"]
+        }
+        Returns: Json
+      }
+      api_authenticate: { Args: { p_token_hash: string }; Returns: string }
+      api_quiz: { Args: { p_owner: string; p_quiz_id: string }; Returns: Json }
+      api_quizzes: { Args: { p_owner: string }; Returns: Json }
       end_exam: {
         Args: { p_session_id: string }
         Returns: {

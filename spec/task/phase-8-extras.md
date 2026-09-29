@@ -15,7 +15,7 @@
 ## Integrasi
 
 - [ ] **P8-06** Webhook `attempt.submitted` dengan tanda tangan HMAC + log pengiriman + retry.
-- [ ] **P8-07** API REST read-only untuk hasil (token API per workspace).
+- [x] **P8-07** API REST read-only untuk hasil (token API per workspace). _(Satu akun = satu workspace; `/api/v1/*`, token di Akun → Integrasi; lihat [docs/02](../../docs/02-architecture.md#api-rest).)_
 - [ ] **P8-08** LTI 1.3 (Moodle, Canvas) + pengiriman nilai ke gradebook.
 - [x] **P8-09** Plugin WordPress / oEmbed. _(`/api/oembed` + discovery; plugin di `integrations/wordpress/quiz-embed/`; lihat [docs/07](../../docs/07-embed.md#oembed--wordpress).)_
 
