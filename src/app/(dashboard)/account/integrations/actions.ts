@@ -6,12 +6,16 @@ import { z } from "zod";
 import { generateApiToken } from "@/lib/api-token";
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhooks } from "@/lib/webhooks/dispatch";
+import { generateWebhookSecret } from "@/lib/webhooks/signing";
+import { allowLocalWebhooks, checkWebhookUrl } from "@/lib/webhooks/url";
 
-// Integrations on /account/integrations (P8-07). Everything runs as the host, so RLS
-// keeps it to their own tokens.
+// Integrations on /account/integrations (P8-06, P8-07). Everything runs as the host, so RLS
+// keeps it to their own tokens and webhooks.
 
 const PAGE = "/account/integrations";
 const MAX_ACTIVE_TOKENS = 20;
+const MAX_WEBHOOKS = 5;
 
 export type CreateTokenResult = { ok: true; token: string } | { ok: false; error: string };
 
@@ -66,4 +70,120 @@ export async function revokeApiTokenAction(tokenId: string): Promise<{ ok: boole
     .is("revoked_at", null);
   revalidatePath(PAGE);
   return { ok: !error };
+}
+
+// ─── Webhooks (P8-06) ─────────────────────────────────────────────────────────
+
+type Done = { ok: true } | { ok: false; error: string };
+
+const webhookSchema = z.object({
+  url: z.string().trim().min(1, "Isi URL.").max(500, "URL terlalu panjang."),
+  description: z.string().trim().max(100, "Keterangan maksimal 100 huruf."),
+});
+
+export async function createWebhookAction(input: {
+  url: string;
+  description: string;
+}): Promise<Done> {
+  await requireHost(PAGE);
+  const parsed = webhookSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Tidak valid." };
+  const check = checkWebhookUrl(parsed.data.url, { allowLocal: allowLocalWebhooks });
+  if (!check.ok) return { ok: false, error: check.error };
+
+  const supabase = await createClient();
+  const { count } = await supabase.from("webhooks").select("id", { count: "exact", head: true });
+  if ((count ?? 0) >= MAX_WEBHOOKS) {
+    return { ok: false, error: `Maksimal ${MAX_WEBHOOKS} webhook. Hapus yang tidak dipakai.` };
+  }
+  const { error } = await supabase.from("webhooks").insert({
+    url: check.url.toString(),
+    description: parsed.data.description,
+    secret: generateWebhookSecret(),
+  });
+  if (error) return { ok: false, error: "Webhook gagal disimpan. Coba lagi." };
+  revalidatePath(PAGE);
+  return { ok: true };
+}
+
+export async function setWebhookActiveAction(webhookId: string, active: boolean): Promise<Done> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(webhookId);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("webhooks")
+    .update({ active: active === true })
+    .eq("id", id);
+  revalidatePath(PAGE);
+  return error ? { ok: false, error: "Gagal menyimpan." } : { ok: true };
+}
+
+export async function deleteWebhookAction(webhookId: string): Promise<Done> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(webhookId);
+  const supabase = await createClient();
+  const { error } = await supabase.from("webhooks").delete().eq("id", id);
+  revalidatePath(PAGE);
+  return error ? { ok: false, error: "Gagal menghapus." } : { ok: true };
+}
+
+export async function webhookSecretAction(
+  webhookId: string,
+  rotate = false,
+): Promise<{ ok: true; secret: string } | { ok: false; error: string }> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(webhookId);
+  const supabase = await createClient();
+  if (rotate) {
+    const secret = generateWebhookSecret();
+    const { error } = await supabase.from("webhooks").update({ secret }).eq("id", id);
+    return error ? { ok: false, error: "Secret gagal diganti." } : { ok: true, secret };
+  }
+  const { data } = await supabase.from("webhooks").select("secret").eq("id", id).maybeSingle();
+  return data
+    ? { ok: true, secret: data.secret }
+    : { ok: false, error: "Webhook tidak ditemukan." };
+}
+
+/** Send one delivery now and say how it went. */
+async function sendNow(eventId: string | null, deliveryId: string | null) {
+  await dispatchWebhooks(10);
+  const supabase = await createClient();
+  let query = supabase
+    .from("webhook_deliveries")
+    .select("status, response_status, last_error")
+    .limit(1);
+  query = eventId ? query.eq("event_id", eventId) : query.eq("id", deliveryId!);
+  const { data } = await query.maybeSingle();
+  revalidatePath(PAGE);
+  if (data?.status === "succeeded") {
+    return { ok: true as const, message: `Terkirim (HTTP ${data.response_status}).` };
+  }
+  const reason = data?.response_status
+    ? `HTTP ${data.response_status}`
+    : (data?.last_error ?? "belum terkirim");
+  return { ok: false as const, error: `Gagal: ${reason}. Akan dicoba lagi otomatis.` };
+}
+
+export async function sendTestWebhookAction(
+  webhookId: string,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(webhookId);
+  const supabase = await createClient();
+  const { data: eventId, error } = await supabase.rpc("send_test_webhook", { p_webhook_id: id });
+  if (error || !eventId) return { ok: false, error: "Webhook tidak ditemukan." };
+  return sendNow(eventId, null);
+}
+
+export async function redeliverWebhookAction(
+  deliveryId: string,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(deliveryId);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("redeliver_webhook", { p_delivery_id: id });
+  if (error) return { ok: false, error: "Pengiriman tidak ditemukan." };
+  return sendNow(null, id);
 }

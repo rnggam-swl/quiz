@@ -60,7 +60,7 @@ Semua pesan memakai format `{ source: 'quiz-embed', type, payload }`.
 | `restart`  | `{}`                  |
 
 - Iframe mengirim pesan ke `document.referrer` origin. Iframe hanya menerima pesan dari origin yang ada di `embed_allowed_origins`.
-- `completed` hanya berisi informasi. **Situs pemasang tidak boleh memakai event ini sebagai bukti nilai**, karena bisa dipalsukan. Untuk nilai yang sah, gunakan webhook atau API dari server ke server (fase lanjutan).
+- `completed` hanya berisi informasi. **Situs pemasang tidak boleh memakai event ini sebagai bukti nilai**, karena bisa dipalsukan. Untuk nilai yang sah, gunakan [webhook](#webhook) atau [API](02-architecture.md#api-rest) dari server ke server.
 
 ## Pembatasan domain
 
@@ -151,7 +151,80 @@ Lalu di halaman: `<div data-quiz="SLUG" data-token="<?= htmlspecialchars($token)
 - Shortcode `[quiz slug="…" theme="dark" session="123456" title="…"]` memakai loader `embed.js` (tinggi otomatis, event).
 - Opsional: pengguna WordPress yang login dikirim sebagai embed token HS256 (`sub = "wp:{ID}"`, `name = display_name`, berlaku 50 menit). Embed secret per quiz diisi di **Pengaturan → Quiz** sebagai `slug=secret`. Halaman yang berisi token dikirim dengan `nocache_headers()`.
 
+## Webhook
+
+✅ P8-06. Nilai yang sah untuk situs pemasang dikirim dari server ke server, bukan dari event `completed` di browser.
+
+- **Pengaturan:** **Akun → Integrasi** (`/account/integrations`). Satu akun bisa punya maksimal 5 URL. Setiap URL punya secret `whsec_…`, bisa dijeda, dites ("Kirim tes" mengirim `webhook.test`), dan secretnya bisa diganti.
+- **Event `attempt.submitted`:** dikirim setiap kali attempt berubah dari `in_progress` menjadi `submitted` atau `expired`, di semua mode (latihan, ujian, live/battle saat podium). Attempt yang dibuka ulang lalu dikirim lagi menjadi event baru.
+
+```json
+{
+  "id": "5f0c…", // sama di setiap percobaan kirim (header webhook-id)
+  "type": "attempt.submitted",
+  "created_at": "2026-09-29T08:00:00+00:00",
+  "data": {
+    "attempt": {
+      "id": "…",
+      "attempt_no": 1,
+      "status": "submitted",
+      "score": 3000,
+      "max_score": 4000,
+      "ratio": 0.75,
+      "started_at": "…",
+      "submitted_at": "…"
+    },
+    "participant": { "id": "…", "nickname": "Budi", "external_id": "user-123", "user_id": null },
+    "session": { "id": "…", "mode": "practice", "title": null },
+    "quiz": {
+      "id": "…",
+      "title": "Klasifikasi Hewan",
+      "slug": "kuis-klasifikasi-hewan",
+      "version": 3
+    }
+  }
+}
+```
+
+- `participant.external_id` adalah `sub` dari embed token, jadi pemasang bisa mencocokkan nilai dengan user mereka. Jawaban per soal tidak dikirim; ambil lewat `GET /api/v1/attempts/{id}` ([API REST](02-architecture.md#api-rest)).
+- **Tanda tangan ([Standard Webhooks](https://www.standardwebhooks.com)):** header `webhook-id`, `webhook-timestamp` (detik Unix), dan `webhook-signature: v1,<base64 HMAC-SHA256(kunci, "{id}.{timestamp}.{body}")>`. Kunci = bagian base64 setelah `whsec_`. Penerima wajib memverifikasi tanda tangan atas **body mentah**, menolak timestamp yang selisihnya lebih dari 5 menit, dan mengabaikan `webhook-id` yang sudah pernah diproses. Library resmi Standard Webhooks (Node, PHP, Python, dll.) bisa langsung dipakai.
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verify(secret, headers, rawBody) {
+  const id = headers["webhook-id"],
+    ts = headers["webhook-timestamp"];
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  const expected = `v1,${createHmac("sha256", key).update(`${id}.${ts}.${rawBody}`).digest("base64")}`;
+  return headers["webhook-signature"]
+    .split(" ")
+    .some(
+      (sig) =>
+        sig.length === expected.length && timingSafeEqual(Buffer.from(sig), Buffer.from(expected)),
+    );
+}
+```
+
+- **Sukses** = HTTP 2xx dalam 10 detik. Redirect dianggap gagal (tidak diikuti).
+- **Retry:** gagal → dicoba lagi setelah 1 menit, 5 menit, 30 menit, 2 jam, 6 jam, 12 jam (7 kali, ±21 jam), lalu ditandai gagal. Riwayat 20 pengiriman terakhir ada di halaman Integrasi, dengan tombol **Kirim ulang**. Log dihapus setelah 30 hari.
+
+**Cara kerja** ([`supabase/migrations/20261001200000_webhooks.sql`](../supabase/migrations/20261001200000_webhooks.sql), [`src/lib/webhooks/`](../src/lib/webhooks/)):
+
+1. **Outbox:** trigger di `attempts` menulis satu baris `webhook_deliveries` per webhook aktif, di transaksi yang sama dengan submit. Event tidak hilang walaupun server mati tepat setelah submit.
+2. **Kirim segera:** Server Action yang men-submit (latihan, ujian, podium live) memanggil `after(dispatchWebhooks)`. `claim_webhook_deliveries` mengunci baris (`for update skip locked`, 2 menit), jadi dua dispatcher tidak mengirim percobaan yang sama.
+3. **Retry dan attempt yang kedaluwarsa oleh cron:** `pg_cron` setiap menit menjalankan `ping_webhook_dispatcher()`. Jika ada yang jatuh tempo, fungsi itu memanggil `POST {app}/api/webhooks/dispatch` lewat `pg_net` dengan `Authorization: Bearer CRON_SECRET`. Sekali setup di Supabase (SQL editor):
+
+   ```sql
+   select vault.create_secret('https://quiz.sekolah.id', 'quiz_app_url');
+   select vault.create_secret('<nilai CRON_SECRET>', 'quiz_cron_secret');
+   ```
+
+   dan isi env `CRON_SECRET` (≥ 32 karakter) di Vercel. Tanpa ini, pengiriman pertama tetap jalan. Retry baru terkirim saat dispatcher berikutnya berjalan (submit berikutnya, atau tombol Kirim ulang). Alternatif di Vercel Pro: Vercel Cron `GET /api/webhooks/dispatch` tiap menit (header yang sama dikirim otomatis).
+
+4. **Kenapa dikirim dari app, bukan `pg_net` langsung:** URL webhook diisi pengguna. Kalau database yang memanggilnya, URL itu bisa diarahkan ke jaringan internal database (SSRF). App menolak `http://`, `localhost`, IP privat/link-local/CGNAT (dicek saat disimpan dan setelah DNS di-resolve saat mengirim) serta redirect. `pg_net` hanya memanggil URL app sendiri dari Vault. Untuk pengembangan, `http://localhost` diizinkan di `pnpm dev` atau jika `WEBHOOKS_ALLOW_LOCAL=true` (hanya CI E2E).
+
 ## Fase lanjutan
 
-- Webhook `attempt.submitted` ke URL milik pemasang (ditandatangani HMAC).
 - LTI 1.3 untuk Moodle, Canvas, dan lainnya, dengan pengiriman nilai ke gradebook.

@@ -20,6 +20,7 @@ import { getParticipantTokenSecret } from "@/lib/env.server";
 import { signParticipantToken } from "@/lib/participant-token";
 import { randomSeed } from "@/lib/seed-random";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchWebhooksAfterResponse } from "@/lib/webhooks/dispatch";
 import type { Json } from "@/lib/supabase/database.types";
 import {
   MAX_PATH,
@@ -190,6 +191,7 @@ async function close(
     p_max_streak: 0,
   });
   if (error || !done) return { ok: false, error: rpcError(error?.message) };
+  dispatchWebhooksAfterResponse(); // attempt.submitted (P8-06)
   const result = await resultFor(ctx, done);
   return result ? { ok: true, result } : { ok: false, error: "not_found" };
 }

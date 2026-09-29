@@ -26,3 +26,9 @@ export function getParticipantTokenSecret(): string {
     PARTICIPANT_TOKEN_SECRET: process.env.PARTICIPANT_TOKEN_SECRET,
   }).PARTICIPANT_TOKEN_SECRET;
 }
+
+/** Bearer secret for /api/webhooks/dispatch (pg_cron ping or Vercel Cron). Optional. */
+export function getCronSecret(): string | null {
+  const secret = process.env.CRON_SECRET;
+  return secret && secret.length >= 32 ? secret : null;
+}

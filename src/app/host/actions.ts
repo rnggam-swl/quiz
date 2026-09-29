@@ -7,6 +7,7 @@ import type { HostAction, HostView } from "@/engine/live/types";
 import type { Result } from "@/engine/practice/types";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhooksAfterResponse } from "@/lib/webhooks/dispatch";
 
 // The projector's controls (docs/09-mode-live.md). They run as the signed-in host:
 // RLS and the owner-checked RPCs keep them to the host's own sessions. After each
@@ -62,6 +63,8 @@ export async function advanceLiveAction(
   });
   if (error || !data)
     return { ok: false, error: error?.message.includes("no_questions") ? "invalid" : "not_found" };
+  // The podium submits everyone's attempt: attempt.submitted webhooks (P8-06).
+  if (data.phase === "podium" || data.phase === "ended") dispatchWebhooksAfterResponse();
   return viewAfter(supabase, sessionId, { changed: data.state_version !== version });
 }
 

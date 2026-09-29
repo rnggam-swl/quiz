@@ -767,6 +767,109 @@ export type Database = {
           },
         ]
       }
+      webhook_deliveries: {
+        Row: {
+          attempts: number
+          created_at: string
+          delivered_at: string | null
+          event: string
+          event_id: string
+          id: string
+          last_error: string | null
+          locked_until: string | null
+          next_attempt_at: string
+          payload: Json
+          response_body: string | null
+          response_status: number | null
+          status: string
+          webhook_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          delivered_at?: string | null
+          event: string
+          event_id: string
+          id?: string
+          last_error?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          payload: Json
+          response_body?: string | null
+          response_status?: number | null
+          status?: string
+          webhook_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          delivered_at?: string | null
+          event?: string
+          event_id?: string
+          id?: string
+          last_error?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          response_body?: string | null
+          response_status?: number | null
+          status?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_deliveries_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhooks: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string
+          events: string[]
+          id: string
+          owner_id: string
+          secret: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string
+          events?: string[]
+          id?: string
+          owner_id?: string
+          secret: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string
+          events?: string[]
+          id?: string
+          owner_id?: string
+          secret?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -830,6 +933,19 @@ export type Database = {
       api_authenticate: { Args: { p_token_hash: string }; Returns: string }
       api_quiz: { Args: { p_owner: string; p_quiz_id: string }; Returns: Json }
       api_quizzes: { Args: { p_owner: string }; Returns: Json }
+      call_app: { Args: { p_path: string }; Returns: undefined }
+      claim_webhook_deliveries: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          event: string
+          event_id: string
+          id: string
+          payload: Json
+          secret: string
+          url: string
+        }[]
+      }
       end_exam: {
         Args: { p_session_id: string }
         Returns: {
@@ -930,6 +1046,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      finish_webhook_delivery: {
+        Args: {
+          p_body?: string
+          p_delivery_id: string
+          p_error?: string
+          p_ok: boolean
+          p_status?: number
+        }
+        Returns: undefined
       }
       generate_session_code: { Args: never; Returns: string }
       grade_response: {
@@ -1071,6 +1197,7 @@ export type Database = {
       }
       owns_quiz: { Args: { p_quiz_id: string }; Returns: boolean }
       owns_session: { Args: { p_session_id: string }; Returns: boolean }
+      ping_webhook_dispatcher: { Args: never; Returns: undefined }
       publish_quiz: {
         Args: { p_base_revision: number; p_quiz_id: string; p_slug: string }
         Returns: {
@@ -1090,17 +1217,6 @@ export type Database = {
         Returns: Json
       }
       record_live_answer: {
-        Args: {
-          p_answer: Json
-          p_base_points: number
-          p_correct: number
-          p_participant_id: string
-          p_question_id: string
-          p_total: number
-        }
-        Returns: Json
-      }
-      record_royale_answer: {
         Args: {
           p_answer: Json
           p_base_points: number
@@ -1144,6 +1260,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_royale_answer: {
+        Args: {
+          p_answer: Json
+          p_base_points: number
+          p_correct: number
+          p_participant_id: string
+          p_question_id: string
+          p_total: number
+        }
+        Returns: Json
+      }
+      redeliver_webhook: { Args: { p_delivery_id: string }; Returns: undefined }
       reopen_attempt: {
         Args: { p_attempt_id: string; p_minutes: number }
         Returns: {
@@ -1195,6 +1323,7 @@ export type Database = {
         }
         Returns: number
       }
+      send_test_webhook: { Args: { p_webhook_id: string }; Returns: string }
       start_attempt: {
         Args: {
           p_duration_s?: number
@@ -1300,6 +1429,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      webhook_attempt_payload: {
+        Args: { p_attempt_id: string; p_event_id: string }
+        Returns: Json
       }
     }
     Enums: {

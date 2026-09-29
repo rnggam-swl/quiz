@@ -24,6 +24,7 @@ import { getParticipantTokenSecret } from "@/lib/env.server";
 import { signParticipantToken } from "@/lib/participant-token";
 import { randomSeed } from "@/lib/seed-random";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchWebhooksAfterResponse } from "@/lib/webhooks/dispatch";
 import type { Json } from "@/lib/supabase/database.types";
 import type { ScoreResult } from "@/questions/types";
 
@@ -221,6 +222,7 @@ export async function finishAttemptAction(
     p_max_streak: draft.maxStreak,
   });
   if (error || !done) return { ok: false, error: rpcError(error?.message) };
+  dispatchWebhooksAfterResponse(); // attempt.submitted (P8-06)
 
   const canRetry =
     isSessionOpen(ctx) && (ctx.policy.attempts === 0 || done.attempt_no < ctx.policy.attempts);
