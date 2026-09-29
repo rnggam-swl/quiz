@@ -221,6 +221,31 @@ answer: {
 
 ---
 
+## Impor & ekspor
+
+✅ P8-13. Tombol spreadsheet di header editor: **Impor dari Excel / CSV**, **Ekspor ke Excel (.xlsx)**, **Ekspor ke CSV**, dan **Unduh template**. Semuanya berjalan di browser ([`src/components/editor/SheetMenu.tsx`](../src/components/editor/SheetMenu.tsx)). Soal hasil impor ditambahkan di akhir draf dan ikut tersimpan lewat autosave seperti editan biasa. Konversi murni ada di [`src/lib/question-sheet.ts`](../src/lib/question-sheet.ts) (diuji bolak-balik untuk semua tipe, termasuk lewat file .xlsx sungguhan).
+
+Satu baris = satu soal. Kolom: `Tipe`, `Pertanyaan`, `Opsi 1`–`Opsi 6`, `Jawaban`, `Waktu (detik)`, `Poin`, `Penjelasan`, `Tag` (pisahkan dengan koma), `Data lanjutan (JSON)`. Judul kolom tidak peka huruf besar/kecil, dan kolom opsional boleh tidak ada.
+
+| Tipe (kolom Tipe)                  | Opsi                         | Jawaban                                                     |
+| ---------------------------------- | ---------------------------- | ----------------------------------------------------------- |
+| `pilihan_ganda`                    | pilihan jawaban              | nomor opsi benar (`2`), atau beberapa (`1,3`) = pilih semua |
+| `benar_salah`                      | –                            | `Benar` / `Salah`                                           |
+| `isian`                            | –                            | jawaban yang diterima, dipisah `\|` (`Soekarno \| Sukarno`) |
+| `angka`                            | –                            | `3,5` atau dengan toleransi `12,5 ± 0,5`                    |
+| `urutkan`                          | item dalam urutan yang benar | –                                                           |
+| `odd_one_out`                      | item                         | nomor item yang berbeda                                     |
+| `esai`                             | –                            | panduan penilaian (opsional)                                |
+| tipe lain (`matching`, `hotspot`…) | –                            | hanya lewat kolom Data lanjutan                             |
+
+- Tipe juga bisa ditulis dengan kunci internal (`multiple_choice`) atau label editor ("Pilihan Ganda").
+- **Data lanjutan (JSON)** berisi `{ config, media, help }`. Ekspor mengisinya hanya jika kolom biasa tidak cukup: media pada soal/opsi, rubrik esai, satuan angka, isian peka huruf besar, lebih dari 6 opsi, atau tipe lanjutan. Dengan begitu hasil ekspor selalu bisa diimpor kembali tanpa ada yang hilang. Saat impor, `config` divalidasi dengan `configSchema` tipe terkait.
+- CSV: UTF-8 dengan BOM, pemisah `,`, `;` (Excel berbahasa Indonesia), atau tab dideteksi dari baris judul. Sel yang diawali `= + - @` diberi `'` saat ekspor (CSV injection), dan tanda itu dibuang lagi saat impor.
+- Baris yang tidak bisa dibaca dilewati, dan dialog menampilkan nomor baris beserta alasannya sebelum soal ditambahkan. Maksimal 500 soal dan 5 MB per file.
+- Library `write-excel-file` / `read-excel-file` hanya dimuat saat tombolnya dipakai.
+
+---
+
 ## Menambah tipe soal baru (checklist)
 
 1. Buat `src/questions/<tipe>/` berisi `definition.ts` (murni), `definition.test.ts`, `Editor.tsx`, dan `Player.tsx`.

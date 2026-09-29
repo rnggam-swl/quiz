@@ -14,6 +14,7 @@ import { PublishButton } from "./PublishButton";
 import { QuestionCanvas } from "./QuestionCanvas";
 import { QuestionList } from "./QuestionList";
 import { SaveIndicator } from "./SaveIndicator";
+import { SheetMenu } from "./SheetMenu";
 import { createEditorStore } from "./store";
 import type { EditorAdapter, EditorInitialState } from "./types";
 import { useAutosave } from "./useAutosave";
@@ -89,6 +90,7 @@ function EditorHeader({ backHref, actions }: { backHref: string; actions?: React
         <Button variant="secondary" onClick={() => setPreviewOpen(true)} aria-label="Pratinjau">
           <Eye /> <span className="hidden sm:inline">Pratinjau</span>
         </Button>
+        <SheetMenu />
         {actions}
         <PublishButton />
       </div>

@@ -24,7 +24,7 @@
 - [ ] **P8-10** Generate soal dengan AI dari topik, teks, atau PDF. Hasilnya berupa draft yang wajib ditinjau guru sebelum dipakai.
 - [x] **P8-11** Library quiz publik: visibilitas `public`, pencarian, duplikat ke akun sendiri. _(`/library`, **Bagikan → Library**, `copy_library_quiz`; lihat [docs/01](../../docs/01-product.md#library).)_
 - [ ] **P8-12** Bank soal lintas quiz (tag global).
-- [ ] **P8-13** Impor soal dari CSV/XLSX, dan ekspor.
+- [x] **P8-13** Impor soal dari CSV/XLSX, dan ekspor. _(Menu spreadsheet di editor; lihat [docs/04](../../docs/04-question-types.md#impor--ekspor).)_
 
 ## Skala
 
