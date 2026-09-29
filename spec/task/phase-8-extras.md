@@ -2,13 +2,15 @@
 
 **Tujuan:** melengkapi mekanik battle dan integrasi setelah fondasi stabil. Urutan di bawah adalah usulan prioritas dan bisa diubah sesuai masukan pengguna.
 
+**Urutan pengerjaan (2026-09-29, dari yang paling cepat):** P8-16 → P8-14 → P8-09 → P8-07 → P8-06 → P8-15 → P8-11 → P8-13 → P8-12 → P8-03 → P8-10 → P8-04 → P8-01 → P8-02 → P8-08. P8-05 ditunda.
+
 ## Battle
 
 - [ ] **P8-01** Rebutan varian **Pencet lalu Jawab**: tabel `buzzer_holds`, tombol BUZZ, hold eksklusif `holdS` detik, buzzer dibuka lagi jika salah atau waktu habis, event `buzz_hold`.
 - [ ] **P8-02** **Mode tim**: tabel `teams`, pilih atau bagi otomatis di lobby, poin/nyawa per tim, leaderboard tim, satu perwakilan buzzer per tim.
 - [ ] **P8-03** **Buka serentak**: soal dikirim saat countdown dan ditampilkan pada `openedAt` sesuai waktu server.
 - [ ] **P8-04** **Jeda toleransi** (`graceMs`): status `resolving`, pemenang = `reaction_ms` terkecil yang sudah divalidasi di antara jawaban benar dalam jeda.
-- [ ] **P8-05** Power-up (opsional): 50:50, perisai (tahan satu kesalahan di royale), tambah waktu. Perlu keputusan desain dulu karena memengaruhi keadilan.
+- [ ] **P8-05** Power-up (opsional): 50:50, perisai (tahan satu kesalahan di royale), tambah waktu. Perlu keputusan desain dulu karena memengaruhi keadilan. _(Ditunda 2026-09-29: keputusan desain masih terbuka.)_
 
 ## Integrasi
 
@@ -31,4 +33,4 @@
 ## Perawatan
 
 - [ ] **P8-15** Bersihkan file yatim di bucket `quiz-media`: file milik quiz yang dihapus, dan media yang dilepas dari soal (di editor, hapus media hanya mengubah JSON soal). Usulan: job terjadwal yang membandingkan isi bucket dengan referensi di `questions.media`, `quizzes.cover_url`, dan `quiz_versions.snapshot`.
-- [ ] **P8-16** Lupa/reset password (email) dan ubah password di halaman akun.
+- [x] **P8-16** Lupa/reset password (email) dan ubah password di halaman akun. _(`/forgot-password`, `/reset-password`, `/account`; lihat [docs/02](../../docs/02-architecture.md#identitas-peserta).)_

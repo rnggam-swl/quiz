@@ -102,7 +102,14 @@ export function AuthForm({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-baseline justify-between gap-2">
+            <Label htmlFor="password">Password</Label>
+            {!signup && (
+              <Link href="/forgot-password" className="text-xs text-accent-fg underline">
+                Lupa password?
+              </Link>
+            )}
+          </div>
           <Input
             id="password"
             name="password"

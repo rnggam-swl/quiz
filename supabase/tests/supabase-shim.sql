@@ -12,7 +12,8 @@ create table auth.users (
   id                 uuid primary key,
   email              text,
   raw_user_meta_data jsonb not null default '{}',
-  is_anonymous       boolean not null default false
+  is_anonymous       boolean not null default false,
+  encrypted_password text
 );
 
 -- Same resolution order as Supabase: legacy per-claim setting, then the claims JSON.

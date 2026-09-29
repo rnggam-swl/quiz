@@ -242,6 +242,12 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Reset password (P8-16): token_hash link to /auth/confirm, so it also works when the email is
+# opened on another device. Cloud: paste the same template in Authentication → Email Templates.
+[auth.email.template.recovery]
+subject = "Reset password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

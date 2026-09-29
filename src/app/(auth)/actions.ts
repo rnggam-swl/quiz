@@ -1,10 +1,13 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { safeNextPath } from "@/lib/auth";
+import { getSessionUser, safeNextPath } from "@/lib/auth";
+import { authMessage, MIN_PASSWORD, newPasswordSchema } from "@/lib/auth-errors";
+import { RECOVERY_COOKIE, verifyRecoveryMarker } from "@/lib/recovery";
+import { requestOrigin } from "@/lib/request-origin";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthFormState = {
@@ -13,8 +16,6 @@ export type AuthFormState = {
   email?: string;
   name?: string;
 };
-
-const MIN_PASSWORD = 8;
 
 const credentials = z.object({
   email: z.email("Email tidak valid.").max(254),
@@ -25,37 +26,6 @@ const signUpSchema = credentials.extend({
   name: z.string().trim().min(1, "Nama wajib diisi.").max(80),
   password: z.string().min(MIN_PASSWORD, `Password minimal ${MIN_PASSWORD} karakter.`).max(128),
 });
-
-/** Supabase auth error codes → messages people understand. */
-function authMessage(code: string | undefined): string {
-  switch (code) {
-    case "invalid_credentials":
-      return "Email atau password salah.";
-    case "email_not_confirmed":
-      return "Email belum dikonfirmasi. Cek kotak masuk kamu.";
-    case "user_already_exists":
-    case "email_exists":
-      return "Email ini sudah terdaftar. Silakan masuk.";
-    case "weak_password":
-      return "Password terlalu lemah. Pakai kombinasi huruf dan angka.";
-    case "over_request_rate_limit":
-    case "over_email_send_rate_limit":
-      return "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.";
-    case "signup_disabled":
-      return "Pendaftaran sedang ditutup.";
-    default:
-      return "Terjadi kesalahan. Coba lagi.";
-  }
-}
-
-async function siteOrigin(): Promise<string> {
-  const h = await headers();
-  const origin = h.get("origin");
-  if (origin) return origin;
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
 
 export async function signInAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
   const email = String(form.get("email") ?? "");
@@ -82,7 +52,7 @@ export async function signUpAction(_prev: AuthFormState, form: FormData): Promis
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.name },
-      emailRedirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
   if (error) return { error: authMessage(error.code), email, name };
@@ -99,10 +69,64 @@ export async function signInWithGoogleAction(form: FormData): Promise<void> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
+    options: {
+      redirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
   });
   if (error || !data.url) redirect("/login?error=oauth");
   redirect(data.url);
+}
+
+/**
+ * Lupa password (P8-16). Always the same answer, whether or not the email has an account,
+ * so the form can't be used to find out who is registered.
+ */
+export async function requestPasswordResetAction(
+  _prev: AuthFormState,
+  form: FormData,
+): Promise<AuthFormState> {
+  const email = String(form.get("email") ?? "");
+  const parsed = z.email("Email tidak valid.").max(254).safeParse(email.trim());
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message, email };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: `${await requestOrigin()}/auth/callback?flow=recovery&next=/reset-password`,
+  });
+  if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
+    return { error: authMessage(error.code), email };
+  }
+  return {
+    notice: `Jika ${parsed.data} terdaftar, kami sudah mengirim link untuk membuat password baru. Link berlaku sebentar, buka di browser ini.`,
+  };
+}
+
+/** Set a new password from the reset link: needs the recovery marker, not the old password. */
+export async function resetPasswordAction(
+  _prev: AuthFormState,
+  form: FormData,
+): Promise<AuthFormState> {
+  const user = await getSessionUser();
+  const jar = await cookies();
+  if (
+    !user ||
+    user.isAnonymous ||
+    !verifyRecoveryMarker(jar.get(RECOVERY_COOKIE)?.value, user.id)
+  ) {
+    return { error: "Link reset sudah kedaluwarsa. Minta link baru." };
+  }
+  const parsed = newPasswordSchema.safeParse({
+    password: form.get("password"),
+    confirm: form.get("confirm"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) return { error: authMessage(error.code) };
+
+  jar.delete(RECOVERY_COOKIE);
+  redirect("/account?password=reset");
 }
 
 export async function signOutAction(): Promise<void> {

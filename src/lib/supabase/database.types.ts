@@ -728,6 +728,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_has_password: { Args: never; Returns: boolean }
       advance_live: {
         Args: { p_action: string; p_session_id: string; p_version: number }
         Returns: {

@@ -6,7 +6,7 @@ import { embedOriginsForSlug } from "@/lib/supabase/embed-lookup";
 import { updateSession } from "@/lib/supabase/proxy";
 
 /** Routes for signed-in hosts. The real check is in the DAL (src/lib/auth.ts); this is the fast path. */
-const HOST_ROUTES = ["/quizzes", "/host"];
+const HOST_ROUTES = ["/quizzes", "/host", "/account"];
 
 /** Headers every page gets. Embed pages override frame-ancestors per quiz. */
 function secure(response: NextResponse, csp = "frame-ancestors 'self'"): NextResponse {
