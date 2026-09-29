@@ -147,6 +147,13 @@ export function HostScreen({
     return startLobbyMusic();
   }, [music, phase]);
 
+  // Rebutan: the buzzer when someone got it first (P6-07).
+  const buzzed = view?.mode === "battle_buzzer" && view.phase === "reveal" && !!view.winner;
+  const round = view?.round;
+  useEffect(() => {
+    if (buzzed) playSound("buzzer");
+  }, [buzzed, round]);
+
   // Podium: fanfare and confetti.
   useEffect(() => {
     if (phase !== "podium") return;
@@ -225,7 +232,13 @@ export function HostScreen({
         {view.phase === "countdown" && <CountdownStage view={view} offsetMs={offset} />}
         {view.phase === "open" && <QuestionStage view={view} offsetMs={offset} />}
         {view.phase === "reveal" && <RevealStage view={view} />}
-        {view.phase === "leaderboard" && <LeaderboardStage key={view.round} top={view.top} />}
+        {view.phase === "leaderboard" && (
+          <LeaderboardStage
+            key={view.round}
+            top={view.top}
+            showWins={view.mode === "battle_buzzer"}
+          />
+        )}
         {view.phase === "podium" && <PodiumStage top={view.top} />}
         {view.phase === "ended" && (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">

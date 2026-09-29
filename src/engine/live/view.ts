@@ -72,6 +72,7 @@ function baseView(
   }
   return {
     sessionId: raw.sessionId,
+    mode: raw.mode ?? "live",
     title: snapshot.quiz.title,
     version: raw.version,
     phase: raw.phase,
@@ -86,6 +87,7 @@ function baseView(
     question:
       q && SHOWS_QUESTION.has(raw.phase) ? toPlayQuestion(q, Number(raw.seed ?? 0), policy) : null,
     reveal,
+    winner: raw.winner ?? null,
     top: raw.top ?? [],
     serverNow: new Date(now).toISOString(),
   };
@@ -108,7 +110,9 @@ export function playerView(
   const you = raw.you;
   if (!you) return null;
   const mine = you.answer;
-  const out = RESULTS_OUT.has(raw.phase);
+  // Rebutan answers get their verdict at once (one chance: wrong = locked out, right =
+  // the round is over), so only live keeps it until the reveal.
+  const out = RESULTS_OUT.has(raw.phase) || (raw.mode ?? "live") !== "live";
   const hide = !out && !!mine;
   return {
     ...baseView(raw, snapshot, null, now),

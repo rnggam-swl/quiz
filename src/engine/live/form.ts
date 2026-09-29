@@ -5,50 +5,79 @@ import type { Snapshot } from "@/engine/practice/snapshot";
 import { shuffle } from "@/lib/seed-random";
 import { getDefinition } from "@/questions/registry";
 
-/** The "Mulai live" options (P5-09) and the session they become. */
+import type { GameMode } from "./types";
+
+/** Modes the "Mulai live" dialog can open (royale arrives in P7). */
+export const STARTABLE_MODES = ["live", "battle_buzzer"] as const;
+
+/** The "Mulai live" options (P5-09, P6-06) and the session they become. */
 export const liveFormSchema = z.object({
+  mode: z.enum(STARTABLE_MODES),
   /** Seconds per question when the question has no own limit. */
   perQuestionS: z.number().int().min(5).max(600),
   shuffleQuestions: z.boolean(),
   shuffleOptions: z.boolean(),
   autoAdvance: z.boolean(),
   lateJoin: z.enum(["allow", "spectator", "deny"]),
+  /** Rebutan: points taken for a wrong answer. */
+  wrongPenalty: z.number().int().min(0).max(10_000),
 });
 export type LiveForm = z.infer<typeof liveFormSchema>;
 
 export const DEFAULT_LIVE_FORM: LiveForm = {
+  mode: "live",
   perQuestionS: DEFAULT_POLICIES.live.timer.perQuestionS ?? 20,
   shuffleQuestions: false,
   shuffleOptions: false,
   autoAdvance: false,
   lateJoin: "allow",
+  wrongPenalty: 0,
 };
 
 export function livePolicyFrom(form: LiveForm): Policy {
+  const base = DEFAULT_POLICIES[form.mode];
   return policySchema.parse({
-    ...DEFAULT_POLICIES.live,
+    ...base,
     timer: { perQuestionS: form.perQuestionS },
     shuffleQuestions: form.shuffleQuestions,
     shuffleOptions: form.shuffleOptions,
     autoAdvance: form.autoAdvance,
     lateJoin: form.lateJoin,
+    buzzer: { ...base.buzzer, wrongPenalty: form.wrongPenalty },
   });
 }
 
-/** Questions a live session can play (docs/04 · capability matrix): the rest are skipped. */
-export function liveQuestions(snapshot: Snapshot) {
-  const playable = snapshot.questions.filter(
-    (q) => getDefinition(q.type).capabilities.modes.live !== undefined,
-  );
-  const skipped = snapshot.questions
-    .map((q, i) => ({ q, number: i + 1 }))
-    .filter(({ q }) => getDefinition(q.type).capabilities.modes.live === undefined)
-    .map(({ q, number }) => ({ number, typeLabel: getDefinition(q.type).label }));
-  return { playable, skipped };
+type Listed = { number: number; typeLabel: string; note?: string };
+
+/**
+ * Questions a session of this mode can play (docs/04 · capability matrix). Types
+ * without the mode are skipped; "warn" types are played but listed with the reason.
+ */
+export function liveQuestions(snapshot: Snapshot, mode: GameMode = "live") {
+  const playable = [];
+  const skipped: Listed[] = [];
+  const warned: Listed[] = [];
+  for (const [i, q] of snapshot.questions.entries()) {
+    const { label, capabilities } = getDefinition(q.type);
+    const level = capabilities.modes[mode];
+    if (level === undefined) skipped.push({ number: i + 1, typeLabel: label });
+    else {
+      playable.push(q);
+      if (level === "warn") {
+        warned.push({ number: i + 1, typeLabel: label, note: capabilities.notes?.[mode] });
+      }
+    }
+  }
+  return { playable, skipped, warned };
 }
 
 /** The one question order everybody plays (the projector shows it too). */
-export function liveQuestionOrder(snapshot: Snapshot, policy: Policy, seed: number): string[] {
-  const ids = liveQuestions(snapshot).playable.map((q) => q.id);
+export function liveQuestionOrder(
+  snapshot: Snapshot,
+  policy: Policy,
+  seed: number,
+  mode: GameMode = "live",
+): string[] {
+  const ids = liveQuestions(snapshot, mode).playable.map((q) => q.id);
   return policy.shuffleQuestions ? shuffle(ids, seed) : ids;
 }

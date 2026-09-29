@@ -2,6 +2,7 @@ import type { Policy } from "@/engine/policy";
 import { gradeAnswer } from "@/engine/practice/attempt";
 import { nicknameSchema } from "@/engine/practice/nickname";
 import type { Snapshot } from "@/engine/practice/snapshot";
+import type { PlayError } from "@/engine/practice/types";
 import type { MemoryHub } from "@/engine/transport/memory";
 import { generateSigningKeys } from "@/engine/transport/signing";
 import { createRandom, randomSeed } from "@/lib/seed-random";
@@ -18,6 +19,8 @@ import {
   streakBonus,
 } from "./scoring";
 import type {
+  BattleOutcome,
+  GameMode,
   HostAction,
   LiveHostAdapter,
   LivePhase,
@@ -43,6 +46,7 @@ type LocalPlayer = {
   kicked: boolean;
   spectator: boolean;
   joinedAt: number;
+  wins: number;
   answers: Map<string, LocalAnswer>;
 };
 
@@ -51,6 +55,8 @@ type Round = {
   limitMs: number;
   openedAt: number | null;
   closesAt: number | null;
+  /** Rebutan: who answered right first. */
+  winner: string | null;
 };
 
 /**
@@ -66,10 +72,11 @@ export function createLocalLive(
     sessionId = "playground-live",
     code = "123456",
     latencyMs = 120,
-  }: { hub: MemoryHub; sessionId?: string; code?: string; latencyMs?: number },
+    mode = "live",
+  }: { hub: MemoryHub; sessionId?: string; code?: string; latencyMs?: number; mode?: GameMode },
 ) {
   const seed = randomSeed();
-  const questionIds = liveQuestionOrder(snapshot, policy, seed);
+  const questionIds = liveQuestionOrder(snapshot, policy, seed, mode);
   const players = new Map<string, LocalPlayer>();
   const tokens = new Map<string, string>();
   const bots = new Map<string, number>();
@@ -114,7 +121,7 @@ export function createLocalLive(
     const round = current();
     const rows = active().map((p) => {
       const delta = round ? (p.answers.get(round.questionId)?.points ?? 0) : 0;
-      return { id: p.id, nickname: p.nickname, score: p.score, delta };
+      return { id: p.id, nickname: p.nickname, score: p.score, delta, wins: p.wins };
     });
     const rankBy = (value: (r: (typeof rows)[number]) => number) => (r: (typeof rows)[number]) =>
       1 + rows.filter((o) => value(o) > value(r)).length;
@@ -130,8 +137,12 @@ export function createLocalLive(
     const round = current();
     const you = participantId ? players.get(participantId) : undefined;
     const mine = you && round ? you.answers.get(round.questionId) : undefined;
+    const winner = round?.winner ? players.get(round.winner) : undefined;
     return {
       sessionId,
+      mode,
+      roundId: s.round === null ? null : `local-round-${s.round}`,
+      winner: winner ? { id: winner.id, nickname: winner.nickname } : null,
       versionId: "local",
       seed,
       policy,
@@ -192,16 +203,18 @@ export function createLocalLive(
     });
   }
 
-  function record(p: LocalPlayer, questionId: string, raw: unknown) {
+  type Recorded = { error: PlayError } | { outcome?: BattleOutcome };
+
+  function record(p: LocalPlayer, questionId: string, raw: unknown): Recorded {
     const round = current();
     if (s.phase !== "open" || !round || round.questionId !== questionId || round.openedAt === null)
-      return "round_closed" as const;
+      return { error: "round_closed" };
     if (round.closesAt !== null && Date.now() > round.closesAt + ANSWER_GRACE_MS)
-      return "deadline_passed" as const;
-    if (p.answers.has(questionId)) return "already_answered" as const;
+      return { error: "deadline_passed" };
+    if (p.answers.has(questionId)) return { error: "already_answered" };
     const q = snapshot.questions.find((x) => x.id === questionId)!;
     const graded = gradeAnswer(q, raw);
-    if (!graded) return "invalid" as const;
+    if (!graded) return { error: "invalid" };
     const correct = graded.result?.correct ?? 0;
     const total = graded.result?.total ?? 0;
     const ratio = total > 0 ? Math.min(1, correct / total) : 0;
@@ -209,13 +222,46 @@ export function createLocalLive(
       0,
       Math.min(round.limitMs, (s.pausedAt ?? Date.now()) - round.openedAt),
     );
+    if (mode === "battle_buzzer") {
+      return buzz(p, round, q.points, graded.answer, ratio >= 1, elapsed);
+    }
     const streak = nextStreak(p.streak, ratio, total);
     const bonus = total > 0 && ratio >= 1 ? streakBonus(streak) : 0;
     const points = speedPoints(q.points, ratio, elapsed, round.limitMs) + bonus;
     p.answers.set(questionId, { answer: graded.answer, correct, total, points, timeMs: elapsed });
     p.score += points;
     p.streak = streak;
-    return null;
+    return {};
+  }
+
+  /** Rebutan, as record_battle_answer: the first right answer wins and ends the round. */
+  function buzz(
+    p: LocalPlayer,
+    round: Round,
+    basePoints: number,
+    answer: unknown,
+    correct: boolean,
+    timeMs: number,
+  ): Recorded {
+    let points: number;
+    if (correct) {
+      points = basePoints;
+      round.winner = p.id;
+      p.score += points;
+      p.wins++;
+      p.streak++;
+      for (const other of players.values()) if (other !== p) other.streak = 0;
+    } else {
+      points = -Math.min(policy.buzzer.wrongPenalty, p.score) || 0; // no -0
+      p.score += points;
+      p.streak = 0;
+    }
+    p.answers.set(round.questionId, { answer, correct: correct ? 1 : 0, total: 1, points, timeMs });
+    if (correct) {
+      setPhase("reveal", REVEAL_MS);
+      bump();
+    }
+    return { outcome: { won: correct, correct, points } };
   }
 
   /** Bots answer choice questions after a random delay, right `skill` of the time. */
@@ -248,7 +294,7 @@ export function createLocalLive(
         };
       }
       if (answer === null || random() < 0.1) continue; // some bots don't answer
-      setTimeout(() => record(p, questionId, answer), 800 + random() * limitMs * 0.7);
+      setTimeout(() => void record(p, questionId, answer), 800 + random() * limitMs * 0.7);
     }
   }
 
@@ -292,7 +338,13 @@ export function createLocalLive(
       const idx = s.phase === "lobby" ? 0 : s.round! + 1;
       const q = snapshot.questions.find((x) => x.id === questionIds[idx])!;
       const limitS = q.timeLimitS ?? policy.timer.perQuestionS ?? 20;
-      rounds[idx] = { questionId: q.id, limitMs: limitS * 1000, openedAt: null, closesAt: null };
+      rounds[idx] = {
+        questionId: q.id,
+        limitMs: limitS * 1000,
+        openedAt: null,
+        closesAt: null,
+        winner: null,
+      };
       s.round = idx;
       setPhase("countdown", COUNTDOWN_MS);
     } else if (s.phase === "countdown") {
@@ -335,6 +387,7 @@ export function createLocalLive(
       kicked: false,
       spectator: late && policy.lateJoin === "spectator" && spectatorOk,
       joinedAt: Date.now(),
+      wins: 0,
       answers: new Map(),
     };
     players.set(p.id, p);
@@ -390,8 +443,8 @@ export function createLocalLive(
       if (!p) return { ok: false, error: "unauthorized" };
       if (p.kicked) return { ok: false, error: "kicked" };
       if (p.spectator) return { ok: false, error: "spectator" };
-      const error = record(p, questionId, answer);
-      return error ? { ok: false, error } : { ok: true };
+      const recorded = record(p, questionId, answer);
+      return "error" in recorded ? { ok: false, error: recorded.error } : { ok: true, ...recorded };
     },
   };
 

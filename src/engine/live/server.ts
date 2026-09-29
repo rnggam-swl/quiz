@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolvePolicy, type Policy } from "@/engine/policy";
 import { loadSnapshot } from "@/engine/practice/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
@@ -9,7 +10,13 @@ import { broadcast } from "@/engine/transport/broadcast";
 import { liveSigningKey } from "@/engine/transport/keys";
 
 import { signState } from "./signed";
-import type { HostView, PlayerView, RawLiveState } from "./types";
+import {
+  GAME_MODES,
+  type GameMode,
+  type HostView,
+  type PlayerView,
+  type RawLiveState,
+} from "./types";
 import { hostView, playerView, sharedView, type LiveAnswer } from "./view";
 
 type HostClient = Awaited<ReturnType<typeof createClient>>;
@@ -89,20 +96,34 @@ export async function broadcastShared(
   await broadcast(sessionId, { type: "state", version: raw.version, signed });
 }
 
-// A session's published version never changes, so answering needn't look it up again.
-const versionCache = new Map<string, string>();
+// A session's version, mode and policy never change, so answering needn't look them up again.
+export type SessionInfo = { versionId: string; mode: GameMode; policy: Policy };
+const infoCache = new Map<string, SessionInfo>();
 
-export async function sessionVersion(sessionId: string): Promise<string | null> {
-  const cached = versionCache.get(sessionId);
+export async function sessionInfo(sessionId: string): Promise<SessionInfo | null> {
+  const cached = infoCache.get(sessionId);
   if (cached) return cached;
   const { data } = await createAdminClient()
     .from("sessions")
-    .select("quiz_version_id")
+    .select("quiz_version_id, mode, policy")
     .eq("id", sessionId)
-    .eq("mode", "live")
+    .in("mode", GAME_MODES)
     .maybeSingle();
   if (!data?.quiz_version_id) return null;
-  if (versionCache.size > 500) versionCache.delete(versionCache.keys().next().value!);
-  versionCache.set(sessionId, data.quiz_version_id);
-  return data.quiz_version_id;
+  const mode = data.mode as GameMode;
+  const info = { versionId: data.quiz_version_id, mode, policy: resolvePolicy(mode, data.policy) };
+  if (infoCache.size > 500) infoCache.delete(infoCache.keys().next().value!);
+  infoCache.set(sessionId, info);
+  return info;
+}
+
+/** live_state() as the service role, for the participants' side. */
+export async function loadServiceRaw(
+  sessionId: string,
+): Promise<{ raw: RawLiveState; snapshot: Snapshot } | null> {
+  const { data } = await createAdminClient().rpc("live_state", { p_session_id: sessionId });
+  const raw = data as RawLiveState | null;
+  if (!raw) return null;
+  const snapshot = await loadSnapshot(raw.versionId);
+  return snapshot ? { raw, snapshot } : null;
 }

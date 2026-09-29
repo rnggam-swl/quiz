@@ -19,10 +19,11 @@ export default async function LiveReportPage({
   params,
 }: PageProps<"/quizzes/[id]/live/[sessionId]">) {
   const { id, sessionId } = await params;
-  const { user, session, title, standings, replay, items, questionCount } = await buildLiveReport(
-    id,
-    sessionId,
-  );
+  const { user, session, title, battle, standings, replay, items, questionCount } =
+    await buildLiveReport(id, sessionId);
+  const headers = battle
+    ? ["#", "Peserta", "Skor", "Menang", "Benar", "Ketepatan", "Rata-rata waktu"]
+    : ["#", "Peserta", "Skor", "Benar", "Ketepatan", "Rata-rata waktu"];
   const csv = `/quizzes/${id}/live/${sessionId}/csv`;
   const average = standings.length
     ? Math.round(standings.reduce((s, r) => s + r.accuracy, 0) / standings.length)
@@ -40,7 +41,9 @@ export default async function LiveReportPage({
             >
               <ArrowLeft className="size-4" /> Sesi live
             </Link>
-            <h1 className="text-2xl font-semibold">Laporan live · {title}</h1>
+            <h1 className="text-2xl font-semibold">
+              {battle ? "Laporan rebutan" : "Laporan live"} · {title}
+            </h1>
             <p className="text-sm text-fg-muted">
               <LocalTime iso={session.created_at} />
             </p>
@@ -81,7 +84,7 @@ export default async function LiveReportPage({
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-line text-xs text-fg-subtle">
                   <tr>
-                    {["#", "Peserta", "Skor", "Benar", "Ketepatan", "Rata-rata waktu"].map((h) => (
+                    {headers.map((h) => (
                       <th key={h} scope="col" className="px-4 py-3 font-medium">
                         {h}
                       </th>
@@ -94,6 +97,7 @@ export default async function LiveReportPage({
                       <td className="px-4 py-3 font-semibold tabular-nums">{r.rank}</td>
                       <td className="px-4 py-3 font-medium">{r.nickname}</td>
                       <td className="px-4 py-3 font-semibold tabular-nums">{r.score}</td>
+                      {battle && <td className="px-4 py-3 tabular-nums">{r.wins ?? 0}</td>}
                       <td className="px-4 py-3 tabular-nums">
                         {r.correct}/{replay.length}
                       </td>

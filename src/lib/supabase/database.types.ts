@@ -90,6 +90,54 @@ export type Database = {
           },
         ]
       }
+      battle_answers: {
+        Row: {
+          answer: Json
+          correct: boolean
+          id: string
+          participant_id: string
+          points: number
+          reaction_ms: number | null
+          received_at: string
+          round_id: string
+        }
+        Insert: {
+          answer: Json
+          correct: boolean
+          id?: string
+          participant_id: string
+          points?: number
+          reaction_ms?: number | null
+          received_at?: string
+          round_id: string
+        }
+        Update: {
+          answer?: Json
+          correct?: boolean
+          id?: string
+          participant_id?: string
+          points?: number
+          reaction_ms?: number | null
+          received_at?: string
+          round_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "battle_answers_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "battle_answers_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "battle_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       battle_rounds: {
         Row: {
           closes_at: string | null
@@ -482,6 +530,39 @@ export type Database = {
             columns: ["graded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      round_winners: {
+        Row: {
+          participant_id: string
+          round_id: string
+          won_at: string
+        }
+        Insert: {
+          participant_id: string
+          round_id: string
+          won_at?: string
+        }
+        Update: {
+          participant_id?: string
+          round_id?: string
+          won_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "round_winners_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "round_winners_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: true
+            referencedRelation: "battle_rounds"
             referencedColumns: ["id"]
           },
         ]
@@ -910,6 +991,17 @@ export type Database = {
           slug: string
           version: number
         }[]
+      }
+      record_battle_answer: {
+        Args: {
+          p_answer: Json
+          p_correct: boolean
+          p_participant_id: string
+          p_penalty?: number
+          p_points: number
+          p_question_id: string
+        }
+        Returns: Json
       }
       record_live_answer: {
         Args: {

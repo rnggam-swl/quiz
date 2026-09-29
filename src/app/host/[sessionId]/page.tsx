@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { GAME_MODES } from "@/engine/live/types";
 
 import { HostClient } from "./HostClient";
 
@@ -20,7 +21,7 @@ export default async function HostPage({ params }: PageProps<"/host/[sessionId]"
     .from("sessions")
     .select("id, quiz_id")
     .eq("id", sessionId)
-    .eq("mode", "live")
+    .in("mode", GAME_MODES)
     .maybeSingle();
   if (!session) notFound();
 

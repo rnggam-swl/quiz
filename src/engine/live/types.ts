@@ -12,6 +12,12 @@ export const LIVE_PHASES = [
 ] as const;
 export type LivePhase = (typeof LIVE_PHASES)[number];
 
+/** Session modes that run on the live engine (projector + phones). */
+export const GAME_MODES = ["live", "battle_buzzer", "battle_royale"] as const;
+export type GameMode = (typeof GAME_MODES)[number];
+
+export type Winner = { id: string; nickname: string };
+
 export type Standing = {
   id: string;
   nickname: string;
@@ -21,11 +27,14 @@ export type Standing = {
   rank: number;
   /** Rank before the last round, for the leaderboard animation. */
   prevRank: number;
+  /** Rebutan: questions won. */
+  wins?: number;
 };
 
 /** live_state() as the database returns it (supabase/migrations/…_live.sql). */
 export type RawLiveState = {
   sessionId: string;
+  mode: GameMode;
   versionId: string;
   seed: number | null;
   policy: unknown;
@@ -33,6 +42,7 @@ export type RawLiveState = {
   version: number;
   phase: LivePhase;
   round: number | null;
+  roundId: string | null;
   questionCount: number;
   questionId: string | null;
   phaseOpenedAt: string | null;
@@ -46,6 +56,8 @@ export type RawLiveState = {
   autoAdvance: boolean;
   players: number;
   answered: number;
+  /** Rebutan: who won the current round. */
+  winner: Winner | null;
   top: Standing[];
   you?: {
     id: string;
@@ -82,6 +94,7 @@ export type LiveReveal = {
 /** What every screen shows: the projector and the phones. */
 export type LiveView = {
   sessionId: string;
+  mode: GameMode;
   title: string;
   version: number;
   phase: LivePhase;
@@ -98,6 +111,8 @@ export type LiveView = {
   question: PlayQuestion | null;
   /** Reveal phase only. */
   reveal: LiveReveal | null;
+  /** Rebutan: who won the current round (known from the lock on). */
+  winner: Winner | null;
   /** Leaderboard, podium and end. */
   top: Standing[];
   /** The server's clock when this was built (clock skew correction). */
@@ -138,11 +153,23 @@ export type HostView = LiveView & {
 
 export type HostAction = "next" | "auto" | "pause" | "resume" | "end";
 
+/** Rebutan: what a phone learns right after answering (it's one chance, so at once). */
+export type BattleOutcome = {
+  won: boolean;
+  correct: boolean;
+  /** Points won, or the penalty (negative). */
+  points: number;
+};
+
 /** The phone's view of the outside world: Server Actions, or the local engine. */
 export type LivePlayerAdapter = {
   join: (nickname: string) => Promise<Result<{ token: string; nickname: string }>>;
   state: (token: string) => Promise<Result<{ view: PlayerView }>>;
-  answer: (token: string, questionId: string, answer: unknown) => Promise<Result<object>>;
+  answer: (
+    token: string,
+    questionId: string,
+    answer: unknown,
+  ) => Promise<Result<{ outcome?: BattleOutcome }>>;
 };
 
 /** The projector's controls. */

@@ -8,12 +8,25 @@ import { HostHeader } from "@/components/host/HostHeader";
 import { Button } from "@/components/ui/Button";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { liveQuestions } from "@/engine/live/form";
-import { parseSnapshot } from "@/engine/practice/snapshot";
+import { parseSnapshot, type Snapshot } from "@/engine/practice/snapshot";
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { GAME_MODES, type GameMode } from "@/engine/live/types";
 
 import { Badge } from "../exams/parts";
-import { StartLiveButton } from "./StartLiveButton";
+import { StartLiveButton, type ModeQuestions } from "./StartLiveButton";
+
+function listFor(snapshot: Snapshot | null, mode: GameMode) {
+  if (!snapshot) return { playable: 0, skipped: [], warned: [] };
+  const { playable, skipped, warned } = liveQuestions(snapshot, mode);
+  return { playable: playable.length, skipped, warned };
+}
+
+const MODE_LABEL: Record<string, string> = {
+  live: "Live",
+  battle_buzzer: "Rebutan",
+  battle_royale: "Battle Royale",
+};
 
 export const metadata: Metadata = { title: "Live" };
 
@@ -40,15 +53,19 @@ export default async function LiveSessionsPage({ params }: PageProps<"/quizzes/[
       .maybeSingle(),
     supabase
       .from("sessions")
-      .select("id, code, phase, created_at, question_ids, participants(count)")
+      .select("id, mode, code, phase, created_at, question_ids, participants(count)")
       .eq("quiz_id", id)
-      .eq("mode", "live")
+      .in("mode", GAME_MODES)
       .order("created_at", { ascending: false })
       .limit(50),
   ]);
   if (!quiz || error) notFound();
   const snapshot = parseSnapshot(version?.snapshot);
-  const { playable, skipped } = snapshot ? liveQuestions(snapshot) : { playable: [], skipped: [] };
+  const questions: ModeQuestions = {
+    live: listFor(snapshot, "live"),
+    battle_buzzer: listFor(snapshot, "battle_buzzer"),
+  };
+  const playable = Math.max(questions.live.playable, questions.battle_buzzer.playable);
 
   return (
     <>
@@ -62,19 +79,22 @@ export default async function LiveSessionsPage({ params }: PageProps<"/quizzes/[
             >
               <ArrowLeft className="size-4" /> Kembali ke editor
             </Link>
-            <h1 className="text-2xl font-semibold">Live · {quiz.title || "Quiz tanpa judul"}</h1>
+            <h1 className="text-2xl font-semibold">
+              Live & Rebutan · {quiz.title || "Quiz tanpa judul"}
+            </h1>
             <p className="text-sm text-fg-muted">
-              Soal tampil di proyektor, peserta menjawab di HP. Poin dari ketepatan dan kecepatan.
+              Soal tampil di proyektor, peserta menjawab di HP: live klasik (ketepatan dan
+              kecepatan) atau rebutan (yang tercepat benar menang).
             </p>
           </div>
-          {snapshot && playable.length > 0 && <StartLiveButton quizId={id} skipped={skipped} />}
+          {snapshot && playable > 0 && <StartLiveButton quizId={id} questions={questions} />}
         </div>
 
         {!snapshot ? (
           <p className="rounded-2xl border border-dashed border-line-strong p-10 text-center text-fg-muted">
             Publish quiz ini dulu di editor untuk memainkannya secara live.
           </p>
-        ) : playable.length === 0 ? (
+        ) : playable === 0 ? (
           <p className="rounded-2xl border border-dashed border-line-strong p-10 text-center text-fg-muted">
             Tidak ada soal di quiz ini yang bisa dimainkan secara live.
           </p>
@@ -95,6 +115,7 @@ export default async function LiveSessionsPage({ params }: PageProps<"/quizzes/[
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex items-center gap-2 font-semibold">
                       <LocalTime iso={s.created_at} />
+                      <Badge tone="bg-surface-muted text-fg">{MODE_LABEL[s.mode] ?? s.mode}</Badge>
                       <Badge tone={badge.tone}>{badge.label}</Badge>
                     </span>
                     <span className="text-sm text-fg-subtle">

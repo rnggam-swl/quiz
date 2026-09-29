@@ -24,6 +24,8 @@ export type LiveStandingRow = {
   /** Mean credit over the questions played, 0–100. */
   accuracy: number;
   avgTimeMs: number | null;
+  /** Rebutan: questions won. */
+  wins?: number;
 };
 
 const ratio = (r: LiveResponse) =>

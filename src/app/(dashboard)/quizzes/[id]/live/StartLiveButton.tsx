@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { toast } from "@/components/ui/Toast";
 import { DEFAULT_LIVE_FORM, type LiveForm } from "@/engine/live/form";
+import { cn } from "@/lib/cn";
 
 type Toggle = "shuffleQuestions" | "shuffleOptions" | "autoAdvance";
 
@@ -21,20 +22,42 @@ const TOGGLES: { key: Toggle; label: string }[] = [
   { key: "autoAdvance", label: "Lanjut otomatis setelah jawaban dan papan skor" },
 ];
 
-/** "Mulai live" (P5-09): a few options, then straight to the lobby on the projector. */
+type Listed = { number: number; typeLabel: string; note?: string };
+export type ModeQuestions = Record<
+  LiveForm["mode"],
+  { playable: number; skipped: Listed[]; warned: Listed[] }
+>;
+
+const MODES: { value: LiveForm["mode"]; label: string; hint: string }[] = [
+  {
+    value: "live",
+    label: "Live klasik",
+    hint: "Semua menjawab; poin dari ketepatan dan kecepatan.",
+  },
+  {
+    value: "battle_buzzer",
+    label: "Rebutan",
+    hint: "Yang tercepat benar menang, soal langsung terkunci.",
+  },
+];
+
+/**
+ * "Mulai live" (P5-09, P6-06): the mode and a few options, then straight to the lobby on
+ * the projector. Questions the mode can't play are skipped — the dialog says which.
+ */
 export function StartLiveButton({
   quizId,
-  skipped,
+  questions,
 }: {
   quizId: string;
-  /** Questions a live session can't play (e.g. essays). */
-  skipped: { number: number; typeLabel: string }[];
+  questions: ModeQuestions;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LiveForm>(DEFAULT_LIVE_FORM);
   const [pending, startTransition] = useTransition();
   const set = (patch: Partial<LiveForm>) => setForm({ ...form, ...patch });
+  const current = questions[form.mode];
 
   function start() {
     startTransition(async () => {
@@ -57,14 +80,72 @@ export function StartLiveButton({
         description="Buka layar host di proyektor. Peserta bergabung dengan kode di halaman /join."
       >
         <div className="flex flex-col gap-4">
-          {skipped.length > 0 && (
+          <div role="radiogroup" aria-label="Mode" className="grid gap-2 sm:grid-cols-2">
+            {MODES.map((m) => (
+              <label
+                key={m.value}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 rounded-xl border-2 p-3 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent",
+                  form.mode === m.value
+                    ? "border-accent bg-accent-soft"
+                    : "border-line hover:bg-surface-muted",
+                  questions[m.value].playable === 0 && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="live-mode"
+                  className="sr-only"
+                  checked={form.mode === m.value}
+                  disabled={questions[m.value].playable === 0}
+                  onChange={() => set({ mode: m.value })}
+                />
+                <span className="text-sm font-semibold">{m.label}</span>
+                <span className="text-xs text-fg-muted">{m.hint}</span>
+              </label>
+            ))}
+          </div>
+          {current.skipped.length > 0 && (
             <p className="flex gap-2 rounded-xl bg-warning-soft p-3 text-sm">
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
               <span>
-                Dilewati karena tidak bisa dimainkan live:{" "}
-                {skipped.map((s) => `soal ${s.number} (${s.typeLabel})`).join(", ")}.
+                Dilewati karena tidak bisa dimainkan di mode ini:{" "}
+                {current.skipped.map((s) => `soal ${s.number} (${s.typeLabel})`).join(", ")}.
               </span>
             </p>
+          )}
+          {current.warned.length > 0 && (
+            <ul className="flex flex-col gap-1 rounded-xl bg-surface-muted p-3 text-sm text-fg-muted">
+              {current.warned.map((w) => (
+                <li key={w.number}>
+                  Soal {w.number} ({w.typeLabel}): {w.note ?? "periksa lagi."}
+                </li>
+              ))}
+            </ul>
+          )}
+          {form.mode === "battle_buzzer" && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-penalty" className="font-normal">
+                  Penalti jawaban salah
+                </Label>
+                <Select
+                  id="live-penalty"
+                  className="w-36"
+                  value={form.wrongPenalty}
+                  onChange={(e) => set({ wrongPenalty: Number(e.target.value) })}
+                >
+                  {[0, 100, 250, 500].map((p) => (
+                    <option key={p} value={p}>
+                      {p === 0 ? "Tanpa penalti" : `−${p} poin`}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <p className="text-xs text-fg-subtle">
+                Satu kesempatan per soal. Skor tidak pernah turun di bawah 0.
+              </p>
+            </div>
           )}
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-3">
@@ -120,7 +201,7 @@ export function StartLiveButton({
           <DialogClose asChild>
             <Button variant="secondary">Batal</Button>
           </DialogClose>
-          <Button onClick={start} disabled={pending}>
+          <Button onClick={start} disabled={pending || current.playable === 0}>
             {pending && <LoaderCircle className="animate-spin" />} Buka lobby
           </Button>
         </DialogFooter>

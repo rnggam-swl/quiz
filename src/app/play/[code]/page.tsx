@@ -34,11 +34,12 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
     );
   }
 
-  if (ctx.session.mode === "live") {
+  if (ctx.session.mode === "live" || ctx.session.mode === "battle_buzzer") {
     return (
       <LivePlayClient
         sessionId={ctx.session.id}
         title={ctx.snapshot.quiz.title}
+        mode={ctx.session.mode}
         publicKey={livePublicKey()}
       />
     );

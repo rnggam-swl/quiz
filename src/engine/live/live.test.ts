@@ -53,6 +53,9 @@ const policy = livePolicyFrom(DEFAULT_LIVE_FORM);
 function raw(overrides: Partial<RawLiveState> = {}): RawLiveState {
   return {
     sessionId: "s",
+    mode: "live",
+    roundId: "r0",
+    winner: null,
     versionId: "v",
     seed: 7,
     policy,
@@ -311,5 +314,63 @@ describe("signed shared state", () => {
     expect(withYou(prev, sharedView(raw(), snapshot), ["p1"]).you.kicked).toBe(true);
     expect(PERSONAL_PHASES.has("reveal")).toBe(true);
     expect(PERSONAL_PHASES.has("open")).toBe(false);
+  });
+});
+
+describe("rebutan", () => {
+  it("plays only the types Rebutan supports, and says which ones need care", () => {
+    const { playable, skipped, warned } = liveQuestions(quiz(), "battle_buzzer");
+    expect(playable.map((q) => q.type)).toEqual(["multiple_choice", "true_false"]);
+    expect(skipped.map((s) => s.typeLabel)).toEqual(["Esai"]);
+    expect(warned).toEqual([]);
+    const policy = livePolicyFrom({
+      ...DEFAULT_LIVE_FORM,
+      mode: "battle_buzzer",
+      wrongPenalty: 250,
+    });
+    expect(policy.scoring).toBe("first_correct");
+    expect(policy.buzzer).toEqual({ variant: "first_correct", holdS: 5, wrongPenalty: 250 });
+  });
+
+  it("shows a phone its verdict at once (one chance), unlike live", () => {
+    const view = playerView(raw({ mode: "battle_buzzer" }), quiz())!;
+    expect(view.you).toMatchObject({ score: 1900, result: { ratio: 1, points: 1100 } });
+  });
+
+  it("gives the round to the first right answer and takes the penalty for a wrong one", async () => {
+    const hub = createMemoryHub();
+    const live = createLocalLive(
+      quiz(),
+      livePolicyFrom({ ...DEFAULT_LIVE_FORM, mode: "battle_buzzer", wrongPenalty: 100 }),
+      { hub, latencyMs: 0, mode: "battle_buzzer" },
+    );
+    const ani = await live.player.join("Ani");
+    const budi = await live.player.join("Budi");
+    const caca = await live.player.join("Caca");
+    if (!ani.ok || !budi.ok || !caca.ok) throw new Error("join failed");
+    let host = await live.host.state();
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    const q = host.view.question!;
+
+    expect(await live.player.answer(ani.token, q.id, { selectedIds: ["b"] })).toEqual({
+      ok: true,
+      outcome: { won: false, correct: false, points: 0 },
+    });
+    expect(await live.player.answer(budi.token, q.id, { selectedIds: ["a"] })).toEqual({
+      ok: true,
+      outcome: { won: true, correct: true, points: 1000 },
+    });
+    expect(await live.player.answer(caca.token, q.id, { selectedIds: ["a"] })).toMatchObject({
+      ok: false,
+      error: "round_closed",
+    });
+    const after = await live.host.state();
+    if (!after.ok) throw new Error();
+    expect(after.view.phase).toBe("reveal");
+    expect(after.view.winner).toMatchObject({ nickname: "Budi" });
   });
 });
