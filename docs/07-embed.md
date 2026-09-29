@@ -135,8 +135,23 @@ Lalu di halaman: `<div data-quiz="SLUG" data-token="<?= htmlspecialchars($token)
 - Hanya bisa jika `policy.allowEmbed = true`, dan editor menampilkan peringatan: "Ujian di dalam situs lain lebih mudah dimanipulasi. Gunakan untuk ujian berisiko rendah."
 - Fullscreen memerlukan `allow="fullscreen"` pada iframe. Jika tidak tersedia, fitur fullscreen dilewati dan kejadiannya dicatat.
 
+## oEmbed & WordPress
+
+✅ P8-09. Link embed `https://{domain}/embed/{slug}` bisa ditempel langsung di situs yang mendukung [oEmbed](https://oembed.com) (WordPress, Notion, Discourse, Ghost, …).
+
+- **Endpoint:** `GET /api/oembed?url=https://{domain}/embed/{slug}[?theme=dark]&maxwidth=&maxheight=&format=json` → `{ type: "rich", html: "<iframe …>", width, height, title }`. Kode: [`src/app/api/oembed/route.ts`](../src/app/api/oembed/route.ts), helper murni [`src/lib/oembed.ts`](../src/lib/oembed.ts).
+- Hanya menjawab jika quiz sudah terbit, embed dinyalakan (daftar domain tidak kosong), dan sesi latihan default terbuka. Selain itu 404. `format=xml` → 501. Respons publik (`Access-Control-Allow-Origin: *`, cache 5 menit).
+- HTML-nya iframe biasa (tinggi tetap, default 600 px), karena konsumen oEmbed membuang `<script>`. Untuk tinggi otomatis, pakai loader `embed.js`.
+- **Discovery:** halaman `/embed/{slug}` memuat `<link rel="alternate" type="application/json+oembed">`.
+- Domain situs pemasang tetap harus ada di `embed_allowed_origins`. oEmbed tidak melewati `frame-ancestors`.
+
+**Plugin WordPress** ([`integrations/wordpress/quiz-embed/`](../integrations/wordpress/quiz-embed/)):
+
+- Tanpa plugin, WordPress menemukan provider lewat discovery, tetapi menganggapnya tidak tepercaya dan memberi iframe `sandbox="allow-scripts"`. Akibatnya origin iframe menjadi `null`, `localStorage` dan Server Action gagal. Plugin mendaftarkan provider (`wp_oembed_add_provider`), sehingga iframe tidak di-sandbox.
+- Shortcode `[quiz slug="…" theme="dark" session="123456" title="…"]` memakai loader `embed.js` (tinggi otomatis, event).
+- Opsional: pengguna WordPress yang login dikirim sebagai embed token HS256 (`sub = "wp:{ID}"`, `name = display_name`, berlaku 50 menit). Embed secret per quiz diisi di **Pengaturan → Quiz** sebagai `slug=secret`. Halaman yang berisi token dikirim dengan `nocache_headers()`.
+
 ## Fase lanjutan
 
 - Webhook `attempt.submitted` ke URL milik pemasang (ditandatangani HMAC).
 - LTI 1.3 untuk Moodle, Canvas, dan lainnya, dengan pengiriman nilai ke gradebook.
-- Plugin WordPress / oEmbed.

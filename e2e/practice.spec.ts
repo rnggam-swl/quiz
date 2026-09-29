@@ -92,6 +92,19 @@ test("the quiz embeds on an allowed site and reports back; other sites are refus
   const snippet = await page.getByLabel("Snippet script", { exact: true }).textContent();
   const slug = /data-quiz="([a-z0-9-]+)"/.exec(snippet ?? "")![1]!;
 
+  // oEmbed (P8-09): the embed link turns into an iframe for WordPress & co.
+  const link = `${baseURL}/embed/${slug}`;
+  const oembed = await page.request.get(`/api/oembed?url=${encodeURIComponent(link)}&maxwidth=500`);
+  expect(oembed.status()).toBe(200);
+  const body = (await oembed.json()) as {
+    type: string;
+    title: string;
+    width: number;
+    html: string;
+  };
+  expect(body).toMatchObject({ type: "rich", title: "Kuis Latihan E2E", width: 500 });
+  expect(body.html).toContain(`src="${link}"`);
+
   // Chrome's Local Network Access blocks a public site from loading the app on localhost
   // unless the visitor allows it; a real deployment is on a public domain and needs nothing.
   const visitor = await browser.newContext({ permissions: ["local-network-access"] });

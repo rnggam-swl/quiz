@@ -8,10 +8,25 @@ import {
   verifyEmbedTokenFor,
   type SessionContext,
 } from "@/engine/practice/server";
+import { requestOrigin } from "@/lib/request-origin";
 
 import { EmbedClient } from "./EmbedClient";
 
-export const metadata: Metadata = { title: "Quiz", robots: { index: false } };
+/** oEmbed discovery (P8-09): WordPress and others find /api/oembed from the embed link. */
+export async function generateMetadata({ params }: PageProps<"/embed/[slug]">): Promise<Metadata> {
+  const { slug } = await params;
+  const origin = await requestOrigin();
+  const url = `${origin}/embed/${slug}`;
+  return {
+    title: "Quiz",
+    robots: { index: false },
+    alternates: {
+      types: {
+        "application/json+oembed": `${origin}/api/oembed?url=${encodeURIComponent(url)}&format=json`,
+      },
+    },
+  };
+}
 
 function Notice({ children }: { children: React.ReactNode }) {
   return (
