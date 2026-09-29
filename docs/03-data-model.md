@@ -223,18 +223,19 @@ create table battle_rounds (         -- ✅ P5
   unique (session_id, idx)
 );
 
-create table battle_answers (
+create table battle_answers (           -- ✅ P6 (…_battle_buzzer.sql)
   id              uuid primary key default gen_random_uuid(),
   round_id        uuid not null references battle_rounds on delete cascade,
   participant_id  uuid not null references participants on delete cascade,
   answer          jsonb not null,
   correct         bool not null,
+  points          int not null default 0,  -- poin pemenang, atau penalti (negatif)
+  reaction_ms     int,                    -- jam DB: now() − opened_at
   received_at     timestamptz not null default now(),
-  reaction_ms     int,                    -- dilaporkan klien, divalidasi server
   unique (round_id, participant_id)       -- satu kesempatan per soal
 );
 
-create table round_winners (             -- rebutan: satu pemenang per soal
+create table round_winners (             -- ✅ P6 · rebutan: satu pemenang per soal
   round_id        uuid primary key references battle_rounds on delete cascade,
   participant_id  uuid not null references participants,
   won_at          timestamptz not null default now()
@@ -298,28 +299,28 @@ type Policy = {
 | `session_roster`                        | CRUD di sesinya                                      | Tidak ada akses. `join_exam` mencocokkan NIS/email di server                                                     |
 | `integrity_events`                      | `select` di sesinya                                  | Tidak ada akses langsung. Dikirim lewat Server Action + `log_integrity_events` (`service_role`)                  |
 | `battle_rounds`                         | `select` di sesinya                                  | Tidak ada akses langsung. State diambil lewat Server Action + `live_state` (`service_role`)                      |
-| `battle_*`, `round_winners`             | `select`                                             | `select` terbatas (tanpa jawaban peserta lain sebelum reveal)                                                    |
+| `battle_answers`, `round_winners` ✅    | `select` di sesinya                                  | `select` terbatas (tanpa jawaban peserta lain sebelum reveal)                                                    |
 
 ## RPC utama
 
-| RPC                                                         | Pemanggil                   | Fungsi                                                                                                                                                        |
-| ----------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `save_quiz_draft(quiz, base_revision, meta, questions)` ✅  | host (RLS)                  | Ganti seluruh draf dalam satu transaksi; `revision_conflict` jika revisi basi; id soal milik quiz lain tidak pernah dipindah                                  |
-| `publish_quiz(quiz, base_revision, slug)` ✅                | host (RLS)                  | Snapshot draf tersimpan menjadi versi berikutnya; slug hanya diisi sekali                                                                                     |
-| `join_session(code, nickname)`                              | peserta                     | Validasi kode & status, buat `participants`                                                                                                                   |
-| `live_state(session_id, participant_id?)` ✅                | host (RLS) / `service_role` | State lengkap untuk reconnect (P5-04): tahap, timer, jumlah menjawab, 5 besar dengan poin terakhir & peringkat sebelumnya, dan skor/peringkat/jawaban peserta |
-| `join_live(session_id, nickname)` ✅                        | `service_role`              | Masuk sesi live: cek lobby terkunci dan `lateJoin`, nickname unik, buat satu attempt                                                                          |
-| `record_live_answer(...)` ✅                                | `service_role`              | Satu jawaban per soal; poin kecepatan + bonus streak dihitung dari jam DB; update `participants.score`/`streak`                                               |
-| `advance_live(session_id, version, action)` ✅              | host (pemilik)              | State machine live (`next`/`auto`/`pause`/`resume`/`end`); versi harus cocok; `auto` hanya setelah `phase_closes_at`                                          |
-| `update_live_settings` / `kick_participant` ✅              | host (pemilik)              | Kunci lobby, lanjut otomatis; keluarkan peserta                                                                                                               |
-| `join_exam(session_id, nickname, user_id?, identifier?)` ✅ | `service_role`              | Masuk ujian: nama bebas, akun login, atau NIS/email dari daftar peserta; peserta yang sama dipakai lagi di perangkat lain                                     |
-| `start_attempt(...)` ✅                                     | `service_role`              | Buat attempt, seed, bank soal; ujian: cek `opens_at`, deadline = min(mulai + durasi × (1 + akomodasi), `closes_at`)                                           |
-| `record_response(...)` ✅                                   | `service_role`              | Simpan jawaban + hasil nilai, tolak jika lewat deadline + 5 detik; `correct = null` untuk soal yang dinilai manual                                            |
-| `submit_attempt(attempt_id)` ✅                             | `service_role`              | Kunci attempt, hitung skor total; terlambat → `expired`                                                                                                       |
-| `log_integrity_events(attempt_id, events)` ✅               | `service_role`              | Simpan catatan integritas (maks. 50 per batch)                                                                                                                |
-| `extend_attempt` / `reopen_attempt` / `reset_attempt` ✅    | host (pemilik)              | Tambah waktu, buka ulang attempt yang selesai, atau hapus attempt agar peserta mulai lagi                                                                     |
-| `grade_response(response_id, ratio, feedback?, rubric?)` ✅ | host (pemilik)              | Nilai esai; poin diambil dari snapshot; skor attempt yang sudah selesai ikut diperbarui                                                                       |
-| `end_exam(session_id)` ✅                                   | host (pemilik)              | Tutup ujian sekarang dan tarik deadline attempt yang berjalan ke saat ini                                                                                     |
-| `record_battle_answer(...)`                                 | `service_role`              | Satu transaksi: simpan jawaban, tentukan pemenang, kunci putaran                                                                                              |
-| `resolve_round(round_id)`                                   | server                      | Battle royale: kurangi nyawa, tentukan eliminasi                                                                                                              |
-| `expire_attempts()` ✅                                      | `pg_cron` tiap menit        | Tandai attempt yang lewat deadline sebagai `expired` dan nilai dari jawaban yang tersimpan                                                                    |
+| RPC                                                         | Pemanggil                   | Fungsi                                                                                                                                                                            |
+| ----------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `save_quiz_draft(quiz, base_revision, meta, questions)` ✅  | host (RLS)                  | Ganti seluruh draf dalam satu transaksi; `revision_conflict` jika revisi basi; id soal milik quiz lain tidak pernah dipindah                                                      |
+| `publish_quiz(quiz, base_revision, slug)` ✅                | host (RLS)                  | Snapshot draf tersimpan menjadi versi berikutnya; slug hanya diisi sekali                                                                                                         |
+| `join_session(code, nickname)`                              | peserta                     | Validasi kode & status, buat `participants`                                                                                                                                       |
+| `live_state(session_id, participant_id?)` ✅                | host (RLS) / `service_role` | State lengkap untuk reconnect (P5-04): tahap, timer, jumlah menjawab, 5 besar dengan poin terakhir & peringkat sebelumnya, dan skor/peringkat/jawaban peserta                     |
+| `join_live(session_id, nickname)` ✅                        | `service_role`              | Masuk sesi live: cek lobby terkunci dan `lateJoin`, nickname unik, buat satu attempt                                                                                              |
+| `record_live_answer(...)` ✅                                | `service_role`              | Satu jawaban per soal; poin kecepatan + bonus streak dihitung dari jam DB; update `participants.score`/`streak`                                                                   |
+| `advance_live(session_id, version, action)` ✅              | host (pemilik)              | State machine live (`next`/`auto`/`pause`/`resume`/`end`); versi harus cocok; `auto` hanya setelah `phase_closes_at`                                                              |
+| `update_live_settings` / `kick_participant` ✅              | host (pemilik)              | Kunci lobby, lanjut otomatis; keluarkan peserta                                                                                                                                   |
+| `join_exam(session_id, nickname, user_id?, identifier?)` ✅ | `service_role`              | Masuk ujian: nama bebas, akun login, atau NIS/email dari daftar peserta; peserta yang sama dipakai lagi di perangkat lain                                                         |
+| `start_attempt(...)` ✅                                     | `service_role`              | Buat attempt, seed, bank soal; ujian: cek `opens_at`, deadline = min(mulai + durasi × (1 + akomodasi), `closes_at`)                                                               |
+| `record_response(...)` ✅                                   | `service_role`              | Simpan jawaban + hasil nilai, tolak jika lewat deadline + 5 detik; `correct = null` untuk soal yang dinilai manual                                                                |
+| `submit_attempt(attempt_id)` ✅                             | `service_role`              | Kunci attempt, hitung skor total; terlambat → `expired`                                                                                                                           |
+| `log_integrity_events(attempt_id, events)` ✅               | `service_role`              | Simpan catatan integritas (maks. 50 per batch)                                                                                                                                    |
+| `extend_attempt` / `reopen_attempt` / `reset_attempt` ✅    | host (pemilik)              | Tambah waktu, buka ulang attempt yang selesai, atau hapus attempt agar peserta mulai lagi                                                                                         |
+| `grade_response(response_id, ratio, feedback?, rubric?)` ✅ | host (pemilik)              | Nilai esai; poin diambil dari snapshot; skor attempt yang sudah selesai ikut diperbarui                                                                                           |
+| `end_exam(session_id)` ✅                                   | host (pemilik)              | Tutup ujian sekarang dan tarik deadline attempt yang berjalan ke saat ini                                                                                                         |
+| `record_battle_answer(...)` ✅                              | `service_role`              | Satu transaksi: kunci putaran (`for update`), simpan jawaban (satu per peserta), jawaban benar pertama menang, putaran terkunci dan sesi pindah ke reveal; penalti salah opsional |
+| `resolve_round(round_id)`                                   | server                      | Battle royale: kurangi nyawa, tentukan eliminasi                                                                                                                                  |
+| `expire_attempts()` ✅                                      | `pg_cron` tiap menit        | Tandai attempt yang lewat deadline sebagai `expired` dan nilai dari jawaban yang tersimpan                                                                                        |

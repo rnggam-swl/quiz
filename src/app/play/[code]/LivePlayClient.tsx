@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 import { LivePlayer } from "@/components/live/LivePlayer";
-import type { LivePlayerAdapter } from "@/engine/live/types";
+import type { GameMode, LivePlayerAdapter } from "@/engine/live/types";
 import type { LivePublicKey } from "@/engine/transport/signing";
 import { openSupabaseChannel } from "@/engine/transport/supabase";
 
@@ -12,10 +12,12 @@ import { answerLiveAction, joinLiveAction, liveStateAction } from "../live-actio
 export function LivePlayClient({
   sessionId,
   title,
+  mode,
   publicKey,
 }: {
   sessionId: string;
   title: string;
+  mode: GameMode;
   publicKey: LivePublicKey;
 }) {
   const adapter = useMemo<LivePlayerAdapter>(
@@ -34,6 +36,7 @@ export function LivePlayClient({
       openChannel={openSupabaseChannel}
       storageKey={`quiz:live:${sessionId}`}
       publicKey={publicKey}
+      mode={mode}
     />
   );
 }

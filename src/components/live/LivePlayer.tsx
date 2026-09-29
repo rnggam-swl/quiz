@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Flame, LoaderCircle, Trophy } from "lucide-react";
+import { Eye, EyeOff, Flame, LoaderCircle, Lock, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toast";
 import { openSignedState, PERSONAL_PHASES, withYou } from "@/engine/live/signed";
-import type { LivePlayerAdapter, PlayerView } from "@/engine/live/types";
+import type { BattleOutcome, GameMode, LivePlayerAdapter, PlayerView } from "@/engine/live/types";
 import { NICKNAME_MAX } from "@/engine/practice/nickname";
 import type { PlayError, PlayQuestion } from "@/engine/practice/types";
 import { msUntil } from "@/engine/transport/clock";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { playSound } from "@/lib/sound";
 
 import { Avatar } from "./Avatar";
-import { answerFor, choicesOf, isMultiSelect, keysOf } from "./choices";
+import { answerFor, choicesOf, isCorrectChoice, isMultiSelect, keysOf } from "./choices";
 import { useChannel, useLiveState, useNow, useServerOffset } from "./hooks";
 
 const JOIN_ERRORS: Partial<Record<PlayError, string>> = {
@@ -66,10 +66,13 @@ export function LivePlayer({
   openChannel,
   storageKey,
   publicKey,
+  mode = "live",
   measureClock = true,
 }: {
   sessionId: string;
   title: string;
+  /** For the badge on the join form. */
+  mode?: GameMode;
   adapter: LivePlayerAdapter;
   openChannel: ChannelFactory;
   /** localStorage key for the participant token (null = don't persist). */
@@ -102,6 +105,7 @@ export function LivePlayer({
     return (
       <JoinForm
         title={title}
+        mode={mode}
         adapter={adapter}
         onJoined={(t) => {
           if (storageKey) writeStorage(storageKey, t);
@@ -126,10 +130,12 @@ export function LivePlayer({
 
 function JoinForm({
   title,
+  mode,
   adapter,
   onJoined,
 }: {
   title: string;
+  mode: GameMode;
   adapter: LivePlayerAdapter;
   onJoined: (token: string) => void;
 }) {
@@ -151,7 +157,7 @@ function JoinForm({
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-4 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
         <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold tracking-wide text-accent-fg uppercase">
-          Live
+          {mode === "battle_buzzer" ? "Rebutan" : "Live"}
         </span>
         <h1 className="text-2xl font-semibold text-balance">{title}</h1>
       </div>
@@ -252,16 +258,29 @@ function Game({
 
   // What this phone just sent, until the server confirms it (optimistic).
   const [sent, setSent] = useState<{ questionId: string; answer: unknown } | null>(null);
+  // Rebutan: the verdict on this phone's answer (it comes back at once).
+  const [battle, setBattle] = useState<{
+    questionId: string;
+    outcome?: BattleOutcome;
+    beaten?: boolean;
+  } | null>(null);
 
   // Sounds at the reveal.
   const revealKey = view?.phase === "reveal" ? view.version : null;
   const lastSound = useRef<number | null>(null);
+  const winnerId = view?.winner?.id ?? null;
+  const isBuzzer = view?.mode === "battle_buzzer";
   useEffect(() => {
     if (revealKey === null || lastSound.current === revealKey || !you) return;
     lastSound.current = revealKey;
+    if (isBuzzer) {
+      // The winner heard it when they answered; everyone else feels it (P6-10).
+      if (winnerId && winnerId !== you.id) vibrate();
+      return;
+    }
     if (!you.result) return;
     playSound(you.result.ratio >= 1 ? "correct" : you.result.ratio > 0 ? "partial" : "wrong");
-  }, [revealKey, you]);
+  }, [revealKey, you, isBuzzer, winnerId]);
 
   // Podium: confetti for the top 3.
   const podium = view?.phase === "podium";
@@ -283,7 +302,19 @@ function Game({
     setSent({ questionId: q.id, answer });
     playSound("tap");
     const result = await adapter.answer(token, q.id, answer).catch(() => null);
-    if (!result?.ok && result?.error !== "already_answered") {
+    const buzzer = view?.mode === "battle_buzzer";
+    if (result?.ok && buzzer && result.outcome) {
+      setBattle({ questionId: q.id, outcome: result.outcome });
+      if (result.outcome.won) playSound("correct");
+      else {
+        playSound("wrong");
+        vibrate();
+      }
+    } else if (!result?.ok && buzzer && result?.error === "round_closed") {
+      // Someone was faster; the reveal with their name is on its way.
+      setBattle({ questionId: q.id, beaten: true });
+      vibrate();
+    } else if (!result?.ok && result?.error !== "already_answered") {
       setSent(null);
       toast.error(
         result?.error === "round_closed" || result?.error === "deadline_passed"
@@ -341,6 +372,12 @@ function Game({
             <Center>
               <p className="text-lg">Kamu bergabung saat permainan berjalan, jadi kamu menonton.</p>
             </Center>
+          ) : view.mode === "battle_buzzer" && (answeredNow || battle?.questionId === q.id) ? (
+            <BuzzerWait
+              you={you}
+              battle={battle?.questionId === q.id ? battle : null}
+              sentAnswer={<SentAnswer q={q} answer={myAnswer} />}
+            />
           ) : answeredNow ? (
             <Center>
               <SentAnswer q={q} answer={myAnswer} />
@@ -376,7 +413,11 @@ function Game({
             </>
           )
         ) : view.phase === "reveal" ? (
-          <RevealCard view={view} />
+          view.mode === "battle_buzzer" ? (
+            <BuzzerReveal view={view} />
+          ) : (
+            <RevealCard view={view} />
+          )
         ) : view.phase === "leaderboard" ? (
           <Center>
             <Trophy className="size-12 text-warning" aria-hidden />
@@ -560,6 +601,142 @@ function SentAnswer({ q, answer }: { q: PlayQuestion; answer: unknown }) {
         </span>
       ))}
     </div>
+  );
+}
+
+function vibrate() {
+  try {
+    navigator.vibrate?.(180);
+  } catch {
+    // Not supported (desktop, iOS): the screen says it anyway.
+  }
+}
+
+/** Rebutan, after answering while the round is still open (P6-09 – P6-11). */
+function BuzzerWait({
+  you,
+  battle,
+  sentAnswer,
+}: {
+  you: PlayerView["you"];
+  battle: { outcome?: BattleOutcome; beaten?: boolean } | null;
+  sentAnswer: React.ReactNode;
+}) {
+  const outcome = battle?.outcome;
+  const wrong = outcome ? !outcome.correct : !!you.result && you.result.ratio < 1;
+  if (outcome?.won) {
+    return (
+      <Center>
+        <Zap className="size-16 animate-pop text-warning" aria-hidden />
+        <p className="text-3xl font-bold">Kamu tercepat!</p>
+        <p className="text-xl font-semibold tabular-nums">+{outcome.points} poin</p>
+      </Center>
+    );
+  }
+  if (battle?.beaten) {
+    return (
+      <Center>
+        <Zap className="size-12 text-fg-muted" aria-hidden />
+        <p className="text-2xl font-bold">Keduluan!</p>
+        <p className="text-fg-muted">Ada yang menjawab benar lebih dulu.</p>
+      </Center>
+    );
+  }
+  if (wrong) {
+    const penalty = outcome && outcome.points < 0 ? -outcome.points : 0;
+    return (
+      <Center>
+        <div className="flex w-full animate-shake flex-col items-center gap-2 rounded-3xl bg-danger-soft p-8 text-danger">
+          <Lock className="size-12" aria-hidden />
+          <p className="text-2xl font-bold">Salah!</p>
+          <p className="font-medium">Coba di soal berikutnya</p>
+          {penalty > 0 && <p className="text-sm tabular-nums">−{penalty} poin</p>}
+        </div>
+      </Center>
+    );
+  }
+  return (
+    <Center>
+      {sentAnswer}
+      <p className="text-xl font-semibold">Jawaban terkirim</p>
+    </Center>
+  );
+}
+
+/** The right answer, shown on the phone at a Rebutan reveal (P6-10). */
+function CorrectAnswer({ view }: { view: PlayerView }) {
+  const q = view.question;
+  const config = view.reveal?.config;
+  if (!q || config === undefined) return null;
+  const choices = choicesOf(q);
+  if (choices) {
+    const right = choices.filter((c) => isCorrectChoice(q, config, c.key));
+    return (
+      <div className="flex w-full flex-col gap-2">
+        <p className="text-sm text-fg-muted">Jawaban benar</p>
+        {right.map((c) => (
+          <span
+            key={c.key}
+            className={cn(
+              "flex items-center gap-3 rounded-2xl px-4 py-3 text-lg font-semibold",
+              answerSlotClasses(c.slot),
+            )}
+          >
+            <AnswerShape slot={c.slot} className="size-8 bg-transparent" />
+            <ItemContent item={c.item} fallback={c.item.text || "Opsi"} />
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="w-full rounded-2xl bg-surface p-4 text-left shadow-card">
+      <QuestionView
+        type={q.type}
+        prompt={q.prompt}
+        data={q.data}
+        answer={view.you.answer}
+        reveal={config}
+        disabled
+        size="sm"
+      />
+    </div>
+  );
+}
+
+function BuzzerReveal({ view }: { view: PlayerView }) {
+  const { you, winner } = view;
+  const mine = winner?.id === you.id;
+  const wrong = !!you.result && you.result.ratio < 1;
+  const points = you.result?.points ?? null;
+  return (
+    <Center>
+      {mine ? (
+        <div className="flex w-full animate-pop flex-col items-center gap-2 rounded-3xl bg-warning-soft p-8 text-warning">
+          <Zap className="size-12" aria-hidden />
+          <p className="text-3xl font-bold">Kamu tercepat!</p>
+          <p className="text-xl font-semibold tabular-nums">
+            {points === null ? "Menghitung poin…" : `+${points} poin`}
+          </p>
+        </div>
+      ) : (
+        <div className="flex w-full flex-col items-center gap-2 rounded-3xl bg-surface-muted p-6">
+          <p className="text-2xl font-bold">
+            {winner ? `Keduluan ${winner.nickname}!` : "Tidak ada yang benar"}
+          </p>
+          {wrong && (
+            <p className="text-danger">
+              Jawabanmu salah{points !== null && points < 0 ? ` (−${-points} poin)` : ""}
+            </p>
+          )}
+        </div>
+      )}
+      <CorrectAnswer view={view} />
+      <p className="text-fg-muted">
+        Peringkat <strong className="text-fg tabular-nums">#{you.rank ?? "…"}</strong> · {you.score}{" "}
+        poin
+      </p>
+    </Center>
   );
 }
 

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { HostScreen } from "@/components/live/HostScreen";
 import { LivePlayer } from "@/components/live/LivePlayer";
 import { Button } from "@/components/ui/Button";
-import { DEFAULT_LIVE_FORM, livePolicyFrom } from "@/engine/live/form";
+import { DEFAULT_LIVE_FORM, livePolicyFrom, type LiveForm } from "@/engine/live/form";
 import { createLocalLive } from "@/engine/live/local";
 import { snapshotFromDraft } from "@/engine/practice/snapshot";
 import { createMemoryHub } from "@/engine/transport/memory";
@@ -17,15 +17,21 @@ import { sampleQuiz } from "../sample";
 const BOT_NAMES = ["Ani", "Budi", "Caca", "Dodi", "Eka", "Fajar", "Gita", "Hana", "Indra", "Joko"];
 
 /** The projector and two phones on one page, over the in-memory engine and hub. */
-export function PlaygroundLive({ auto }: { auto: boolean }) {
+export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["mode"] }) {
   const [{ hub, live, title }] = useState(() => {
     const { quiz, questions } = sampleQuiz("all");
     const snapshot = snapshotFromDraft(quiz, questions);
     const hub = createMemoryHub();
     const live = createLocalLive(
       snapshot,
-      livePolicyFrom({ ...DEFAULT_LIVE_FORM, perQuestionS: 20, autoAdvance: auto }),
-      { hub },
+      livePolicyFrom({
+        ...DEFAULT_LIVE_FORM,
+        mode,
+        perQuestionS: 20,
+        autoAdvance: auto,
+        wrongPenalty: mode === "battle_buzzer" ? 100 : 0,
+      }),
+      { hub, mode },
     );
     return { hub, live, title: quiz.title };
   });
@@ -39,7 +45,7 @@ export function PlaygroundLive({ auto }: { auto: boolean }) {
   return (
     <div className="flex min-h-dvh flex-col gap-3 bg-surface-muted p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <strong>Playground live</strong>
+        <strong>Playground {mode === "battle_buzzer" ? "rebutan" : "live"}</strong>
         <span className="text-fg-muted">kode {live.code}</span>
         <Button
           size="sm"
@@ -89,6 +95,7 @@ export function PlaygroundLive({ auto }: { auto: boolean }) {
               openChannel={hub.open}
               storageKey={null}
               publicKey={publicKey}
+              mode={mode}
               measureClock={false}
             />
           </section>

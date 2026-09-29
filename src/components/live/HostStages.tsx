@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Crown, Smartphone, Users, X } from "lucide-react";
+import { Check, Crown, Smartphone, Trophy, Users, X, Zap } from "lucide-react";
 import { useMemo, type CSSProperties } from "react";
 import { renderSVG } from "uqr";
 
@@ -239,6 +239,7 @@ export function RevealStage({ view }: { view: HostView }) {
   const choices = choicesOf(q);
   return (
     <div className="flex flex-1 flex-col gap-6">
+      {view.mode === "battle_buzzer" && <WinnerBanner view={view} />}
       <Prompt view={view} />
       {choices ? (
         <ChoiceGrid view={view} reveal={reveal} />
@@ -275,9 +276,29 @@ export function RevealStage({ view }: { view: HostView }) {
   );
 }
 
+/** Rebutan: who got it first (P6-07). */
+function WinnerBanner({ view }: { view: HostView }) {
+  if (!view.winner) {
+    return (
+      <p className="self-center rounded-full bg-surface-muted px-6 py-2 text-2xl font-semibold text-fg-muted">
+        Tidak ada yang menjawab benar
+      </p>
+    );
+  }
+  return (
+    <p
+      className="flex animate-pop items-center justify-center gap-3 self-center rounded-3xl bg-warning-soft px-8 py-4 text-4xl font-bold text-warning"
+      role="status"
+    >
+      <Zap className="size-10" aria-hidden /> <Avatar id={view.winner.id} className="size-12" />
+      {view.winner.nickname} tercepat!
+    </p>
+  );
+}
+
 const ROW_REM = 5; // row height + gap, for the slide-in offset
 
-export function LeaderboardStage({ top }: { top: Standing[] }) {
+export function LeaderboardStage({ top, showWins }: { top: Standing[]; showWins?: boolean }) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6">
       <h2 className="text-center text-4xl font-bold">Papan skor</h2>
@@ -305,6 +326,15 @@ export function LeaderboardStage({ top }: { top: Standing[] }) {
                 {row.delta > 0 && (
                   <span className="text-lg font-semibold text-success tabular-nums">
                     +{row.delta}
+                  </span>
+                )}
+                {showWins && (
+                  <span
+                    className="flex items-center gap-1 text-lg font-semibold text-warning tabular-nums"
+                    title="Soal dimenangkan"
+                  >
+                    <Trophy className="size-5" aria-hidden /> {row.wins ?? 0}
+                    <span className="sr-only">soal dimenangkan</span>
                   </span>
                 )}
                 <span className="w-24 text-right text-2xl font-bold tabular-nums">{row.score}</span>

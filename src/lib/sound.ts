@@ -8,7 +8,7 @@
 
 const MUTE_KEY = "quiz:muted";
 
-export type Sound = "correct" | "partial" | "wrong" | "tap" | "fanfare";
+export type Sound = "correct" | "partial" | "wrong" | "tap" | "fanfare" | "buzzer";
 
 type Note = { freq: number; at: number; duration: number; type?: OscillatorType; gain?: number };
 
@@ -25,6 +25,11 @@ const NOTES: Record<Sound, Note[]> = {
   wrong: [
     { freq: 220, at: 0, duration: 0.14, type: "sawtooth", gain: 0.06 },
     { freq: 165, at: 0.12, duration: 0.22, type: "sawtooth", gain: 0.06 },
+  ],
+  // Rebutan: someone got it first.
+  buzzer: [
+    { freq: 180, at: 0, duration: 0.35, type: "square", gain: 0.07 },
+    { freq: 185, at: 0, duration: 0.35, type: "sawtooth", gain: 0.05 },
   ],
   fanfare: [
     { freq: 523, at: 0, duration: 0.12, type: "triangle" },

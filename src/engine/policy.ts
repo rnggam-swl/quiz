@@ -53,6 +53,16 @@ export const policySchema = z.object({
   autoAdvance: z.boolean(),
   /** Live: joining after the first question — play, only watch, or not at all. */
   lateJoin: z.enum(["allow", "spectator", "deny"]),
+  /**
+   * Rebutan (docs/10-mode-battle.md). `first_correct`: the first correct answer wins;
+   * `buzz_then_answer` (press, then answer within holdS) is a later phase.
+   */
+  buzzer: z.object({
+    variant: z.enum(["first_correct", "buzz_then_answer"]),
+    holdS: z.number().int().min(1).max(30),
+    /** Points taken for a wrong answer (never below a score of 0). */
+    wrongPenalty: z.number().int().min(0).max(10_000),
+  }),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -73,6 +83,7 @@ const PRACTICE: Policy = {
   integrity: { fullscreen: false, logTabSwitch: false, blockCopyPaste: false },
   autoAdvance: false,
   lateJoin: "allow",
+  buzzer: { variant: "first_correct", holdS: 5, wrongPenalty: 0 },
 };
 
 /** Defaults per mode; later phases fill in their own (exam P4, live P5, battle P6–P7). */

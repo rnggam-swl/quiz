@@ -25,13 +25,14 @@ pending ─▶ countdown (3s) ─▶ open ─┬─▶ locked ─▶ revealed �
 
 ## Rebutan
 
-### Varian A: Tercepat Benar (default, dibangun dulu)
+### Varian A: Tercepat Benar (default) ✅ P6
 
 - Semua peserta bisa menjawab selama putaran terbuka.
 - **Satu kesempatan per soal.** Peserta yang salah langsung terkunci untuk soal itu. Aturan ini ditegakkan oleh `unique (round_id, participant_id)`.
-- Jawaban benar pertama yang **diterima server** menang, lalu putaran langsung terkunci untuk semua peserta.
-- Pemenang mendapat `question.points`. Penalti salah (`buzzer.wrongPenalty`, default 0) bersifat opsional.
-- Jika tidak ada yang benar sampai waktu habis, jawaban benar ditampilkan dan tidak ada yang mendapat poin.
+- Jawaban benar pertama yang **diterima database** menang. Dalam transaksi yang sama putaran terkunci dan sesi pindah ke tahap `reveal` (5 detik), sehingga semua layar langsung menampilkan pemenang.
+- Pemenang mendapat `question.points` (tanpa faktor kecepatan). Penalti salah (`buzzer.wrongPenalty`, default 0; pilihan 100/250/500 di dialog) bersifat opsional dan tidak pernah membuat skor di bawah 0.
+- Jika tidak ada yang benar sampai waktu habis (atau semua sudah menjawab salah), jawaban benar ditampilkan dan tidak ada yang mendapat poin.
+- Streak rebutan = kemenangan beruntun; kemenangan orang lain memutusnya. Tidak ada bonus streak.
 
 ### Varian B: Pencet lalu Jawab (gaya Cerdas Cermat, fase lanjutan)
 
@@ -43,7 +44,7 @@ pending ─▶ countdown (3s) ─▶ open ─┬─▶ locked ─▶ revealed �
 
 ### Tipe soal
 
-Pilihan Ganda, Benar/Salah, Odd One Out. Isian dan Angka boleh dipakai, tapi editor menampilkan peringatan.
+Pilihan Ganda, Benar/Salah, Odd One Out. Isian dan Angka boleh dipakai, tapi dialog "Mulai" menampilkan peringatannya (kecepatan mengetik ikut menentukan hasil). Tipe lain dilewati, dan dialog menyebutkan soal mana saja.
 
 ---
 
@@ -86,14 +87,15 @@ Semua yang cepat dijawab: Pilihan Ganda, Benar/Salah, Isian, Angka, Slider, Odd 
 ### Alur jawaban
 
 ```
-HP peserta ──submitBattleAnswer──▶ Server Action
-                                     1. parse answer (zod)
-                                     2. score() dari registry  → correct
-                                     3. rpc record_battle_answer(round, participant, answer, correct, reaction_ms)
-                                     4. jika menang → broadcast round_locked { winner }
+HP peserta ──answerLiveAction──▶ Server Action (src/app/play/live-actions.ts)
+                                   1. parse answer (zod)
+                                   2. score() dari registry  → correct (ratio = 1)
+                                   3. rpc record_battle_answer(participant, question, answer, correct, points, penalty)
+                                   4. jika menang → broadcast state bertanda tangan (tahap reveal + pemenang)
+                                   5. kembalikan { won, correct, points } ke HP itu
 ```
 
-### Sketsa RPC
+### RPC (disederhanakan dari implementasi di `supabase/migrations/20260929000000_battle_buzzer.sql`)
 
 ```sql
 create or replace function record_battle_answer(
@@ -142,8 +144,10 @@ revoke execute on function record_battle_answer from public, anon, authenticated
 grant  execute on function record_battle_answer to service_role;
 ```
 
-- `select … for update` pada baris putaran menyerialkan jawaban per putaran. Contention hanya terjadi di satu baris dan singkat.
-- `reaction_ms` dari klien dibatasi dengan waktu server (`least(...)`), jadi klien tidak bisa mengklaim lebih cepat dari kenyataan secara ekstrem. Nilai ini hanya dipakai sebagai tie-breaker.
+- `select … for update` pada baris putaran menyerialkan jawaban per putaran. Contention hanya terjadi di satu baris dan singkat. Setelah menunggu kunci, RPC membaca ulang sesi: kalau sudah ada pemenang, jawaban berikutnya mendapat `round_closed` beserta nama pemenangnya.
+- `round_winners` (primary key `round_id`) adalah pengaman kedua: satu pemenang per putaran.
+- `reaction_ms` diambil dari jam database (`now() − opened_at`), tidak dari klien. Nilai ini dipakai di laporan (rata-rata waktu) dan nanti sebagai tie-breaker jeda toleransi.
+- Test: `supabase/tests/battle.test.ts` (aturan, penalti, izin) dan `e2e/battle.spec.ts` (50 jawaban benar serentak ke Postgres sungguhan, diulang 20 kali → tepat satu pemenang per putaran).
 
 ### Keadilan latensi (fase lanjutan)
 
@@ -154,16 +158,17 @@ Versi pertama memakai urutan tiba di server. Setelah itu, tambahkan dua perbaika
 
 ## Event realtime tambahan
 
-| Event          | Payload                                             |
-| -------------- | --------------------------------------------------- |
-| `buzz_hold`    | `{ participantId, nickname, expiresAt }` (varian B) |
-| `round_locked` | `{ winner?: { nickname, teamId? }, reason }`        |
-| `eliminated`   | `{ participants: [{ id, nickname }], remaining }`   |
-| `lives`        | per peserta: `{ lives }`                            |
+Rebutan tidak butuh event baru: kemenangan memindahkan sesi ke `reveal`, dan Server Action pemenang mem-broadcast `state` bertanda tangan ([09 · Realtime](09-mode-live.md#realtime-sessionid)) yang membawa `winner`. Proyektor dan semua HP langsung tahu siapa yang tercepat.
+
+| Event        | Payload                                             |
+| ------------ | --------------------------------------------------- |
+| `buzz_hold`  | `{ participantId, nickname, expiresAt }` (varian B) |
+| `eliminated` | `{ participants: [{ id, nickname }], remaining }`   |
+| `lives`      | per peserta: `{ lives }`                            |
 
 ## UX
 
-- **Rebutan:** bunyi buzzer. Proyektor menampilkan banner "⚡ Andi tercepat!". HP peserta lain bergetar dengan tulisan "Keduluan!". HP peserta yang salah menampilkan kunci 🔒 "Coba di soal berikutnya".
+- **Rebutan:** bunyi buzzer. Proyektor menampilkan banner "⚡ Andi tercepat!" di atas reveal, dan papan skor menampilkan 🏆 jumlah soal yang dimenangkan. HP peserta lain bergetar dengan tulisan "Keduluan Andi!" dan jawaban benar. HP peserta yang salah langsung menampilkan kunci 🔒 "Coba di soal berikutnya" (+ getar dan penalti jika ada). HP pemenang: "Kamu tercepat! +poin".
 - **Royale:** ❤️❤️🤍 di HUD. Proyektor menampilkan "12 / 40 tersisa" besar dan grid avatar, dengan avatar yang tersingkir menjadi abu-abu dan dicoret. Zona menyempit ditandai timer yang berubah warna.
 - Podium akhir: juara 1–3 + confetti. Untuk royale ditambah "Bertahan sampai putaran ke-N" per peserta.
 
@@ -171,3 +176,14 @@ Versi pertama memakai urutan tiba di server. Setelah itu, tambahkan dua perbaika
 
 - `policy.teams.enabled`: peserta memilih tim di lobby, atau dibagi otomatis secara merata.
 - Rebutan: poin masuk ke tim. Royale: nyawa dihitung per tim, dan tim tersingkir jika semua anggotanya tersingkir.
+
+## Implementasi Rebutan (P6)
+
+| Bagian        | Lokasi                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migrasi & RPC | `supabase/migrations/20260929000000_battle_buzzer.sql`: `battle_answers`, `round_winners`, `record_battle_answer`; fungsi live (`advance_live`, `join_live`, `live_state`, …) kini menerima sesi battle |
+| Policy        | `policy.buzzer = { variant, holdS, wrongPenalty }` (`src/engine/policy.ts`)                                                                                                                             |
+| Membuat sesi  | Dialog "Mulai live" di `/quizzes/{id}/live`: pilih **Live klasik** atau **Rebutan** + penalti                                                                                                           |
+| Layar         | Sama dengan live (`/host/{id}`, `/play/{code}`), dengan layar khusus rebutan di `HostStages` dan `LivePlayer`                                                                                           |
+| Laporan       | `/quizzes/{id}/live/{sessionId}`: klasemen + jumlah menang, replay papan skor, analisis butir soal                                                                                                      |
+| Playground    | `/playground/live?mode=rebutan` (penalti 100, bot ikut berebut)                                                                                                                                         |
