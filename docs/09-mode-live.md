@@ -136,3 +136,27 @@ Catatan (5 soal, 21 perpindahan tahap, 4.200 sampel per metrik):
 - Poin pribadi setelah reveal sengaja menyusul (jeda acak 0–1 detik + satu fetch); tulisan benar/salah sudah tampil bersama state.
 
 Jangan menjalankan skrip ini pada sesi yang sedang dipakai kelas: skrip menambahkan peserta palsu.
+
+## Evaluasi server game khusus (P8-14)
+
+**Keputusan (2026-09-29): tetap di Supabase Realtime.** Uji beban di atas tidak menunjukkan batas Realtime di bawah kebutuhan. Dengan 200 peserta, state bersama tampil p95 1,07 detik, dan angka itu masih termasuk dua RPC dari PC generator di Indonesia ke Seoul. Jawaban tetap cepat (p95 280 ms) karena tidak melewati Realtime sama sekali.
+
+Evaluasi diulang jika salah satu hal ini terjadi:
+
+| Pemicu                                                                                              | Cara mengukur                                                          |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| p95 **broadcast → event di HP** > 1 detik pada 200 peserta, diukur dari region yang sama dengan app | `pnpm load:live` (kolom baru di skrip), generator di cloud Seoul       |
+| Kebutuhan > 500 peserta per sesi, atau total koneksi serentak mendekati kuota paket Supabase        | Dashboard Supabase → Realtime (peak connections)                       |
+| Biaya pesan Realtime tidak wajar                                                                    | Setiap broadcast dihitung per penerima; presence di lobby tumbuh O(n²) |
+
+**Langkah murah sebelum ganti server:** saat ini semua HP ikut menerima diff presence semua peserta lain. Pada lobby 200 orang, itu sekitar 40 ribu pesan hanya untuk tanda online. HP tidak butuh data ini (hanya host yang menampilkan tanda online), jadi presence bisa dipindah ke channel terpisah atau diganti heartbeat `last_seen_at`.
+
+Pilihan jika pemicu tercapai:
+
+| Pilihan                                   | Cocok karena                                                                                                                    | Kekurangan                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Cloudflare Durable Objects / PartyKit** | Satu objek per sesi berfungsi sebagai relay WebSocket di edge, dengan hibernasi (murah saat diam) dan tanpa server yang dirawat | Vendor tambahan dan deploy terpisah dari Vercel                                  |
+| Colyseus (self-hosted)                    | Room per sesi, kontrol penuh                                                                                                    | Harus merawat server Node, sticky session, dan scaling sendiri                   |
+| Ably / Pusher                             | Pub/sub terkelola dengan kuota besar                                                                                            | Modelnya sama dengan Supabase Realtime; hanya memindahkan batas, biaya per pesan |
+
+Rekomendasi: **Durable Objects/PartyKit sebagai relay saja.** Database tetap menjadi sumber kebenaran (RPC, `state_version`, pemenang rebutan), dan state tetap ditandatangani server, sehingga relay tidak perlu dipercaya. Yang berubah hanya `src/engine/transport/`: `broadcast.ts` mengirim ke relay, dan `ChannelFactory` baru (misalnya `partykit.ts`) menggantikan `openSupabaseChannel`. Presence dan protokol event tidak berubah.

@@ -28,7 +28,7 @@
 
 ## Skala
 
-- [ ] **P8-14** Evaluasi server game khusus (PartyKit / Durable Objects / Colyseus) jika uji beban P5 menunjukkan batas Supabase Realtime di bawah kebutuhan. Implementasi baru cukup di `engine/transport/`.
+- [x] **P8-14** Evaluasi server game khusus (PartyKit / Durable Objects / Colyseus) jika uji beban P5 menunjukkan batas Supabase Realtime di bawah kebutuhan. Implementasi baru cukup di `engine/transport/`. _(Keputusan: tetap Supabase Realtime; pemicu evaluasi ulang dan rekomendasi relay Durable Objects di [docs/09](../../docs/09-mode-live.md#evaluasi-server-game-khusus-p8-14).)_
 
 ## Perawatan
 
