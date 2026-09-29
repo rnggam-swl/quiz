@@ -85,6 +85,8 @@ create table quiz_versions (             -- snapshot immutable saat publish
 
 Bucket Storage `quiz-media` bersifat publik (peserta anonim harus bisa memuat gambar). Path-nya `{owner_id}/{quiz_id}/{uuid}.{ext}`, dan hanya pemilik yang boleh menulis di folder miliknya. Server action menolak URL media yang bukan dari bucket ini.
 
+**File yatim (✅ P8-15):** file tetap ada di Storage saat quiz dihapus, dan menghapus media di editor hanya mengubah JSON soal. `orphan_media()` ([`…_media_cleanup.sql`](../supabase/migrations/20261001300000_media_cleanup.sql)) mencari objek `quiz-media` yang URL publiknya tidak disebut di `quizzes.cover_url`, `questions.media`/`config` (media item), maupun `quiz_versions.snapshot` mana pun, termasuk salinan di quiz lain. Objek yang lebih muda dari 1 hari tidak disentuh, karena bisa jadi baru diunggah dan belum tersimpan oleh autosave. Penghapusan harus lewat Storage API (bukan `delete from storage.objects`), jadi dijalankan app di `/api/maintenance/media-cleanup` (maks. 5000 file per run, `?dry=1` hanya menampilkan daftar). Jadwalnya harian lewat `pg_cron` → `call_app()` → `pg_net`, dengan URL app dan `CRON_SECRET` yang sama di Vault seperti [webhook](07-embed.md#webhook).
+
 ## Sesi & peserta
 
 ```sql

@@ -32,5 +32,5 @@
 
 ## Perawatan
 
-- [ ] **P8-15** Bersihkan file yatim di bucket `quiz-media`: file milik quiz yang dihapus, dan media yang dilepas dari soal (di editor, hapus media hanya mengubah JSON soal). Usulan: job terjadwal yang membandingkan isi bucket dengan referensi di `questions.media`, `quizzes.cover_url`, dan `quiz_versions.snapshot`.
+- [x] **P8-15** Bersihkan file yatim di bucket `quiz-media`: file milik quiz yang dihapus, dan media yang dilepas dari soal (di editor, hapus media hanya mengubah JSON soal). Usulan: job terjadwal yang membandingkan isi bucket dengan referensi di `questions.media`, `quizzes.cover_url`, dan `quiz_versions.snapshot`. _(`orphan_media()` + `/api/maintenance/media-cleanup`, harian lewat pg_cron; lihat [docs/03](../../docs/03-data-model.md#konten).)_
 - [x] **P8-16** Lupa/reset password (email) dan ubah password di halaman akun. _(`/forgot-password`, `/reset-password`, `/account`; lihat [docs/02](../../docs/02-architecture.md#identitas-peserta).)_

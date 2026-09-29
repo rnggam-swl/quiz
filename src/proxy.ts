@@ -50,6 +50,6 @@ export const config = {
   // Everything except static files, images, and the public APIs that need no session: the
   // clock-sync ping, oEmbed, the token-authenticated REST API and the scheduled jobs.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|api/webhooks|api/maintenance|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

@@ -13,6 +13,8 @@ export default defineConfig({
   test: {
     // supabase/tests: migrations + RLS on PGlite (in-memory Postgres, no Docker needed).
     include: ["src/**/*.test.{ts,tsx}", "supabase/tests/**/*.test.ts"],
+    // Migrates one PGlite database; each DB test file starts from a copy of it.
+    globalSetup: ["./supabase/tests/global-setup.ts"],
     environment: "node",
   },
 });

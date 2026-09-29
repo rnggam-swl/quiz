@@ -1195,6 +1195,13 @@ export type Database = {
         Args: { p_attempt_id: string; p_events: Json }
         Returns: number
       }
+      orphan_media: {
+        Args: { p_limit?: number; p_min_age?: string }
+        Returns: {
+          created_at: string
+          name: string
+        }[]
+      }
       owns_quiz: { Args: { p_quiz_id: string }; Returns: boolean }
       owns_session: { Args: { p_session_id: string }; Returns: boolean }
       ping_webhook_dispatcher: { Args: never; Returns: undefined }
