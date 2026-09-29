@@ -37,6 +37,7 @@ import {
   QuestionStage,
   RevealStage,
 } from "./HostStages";
+import { RoyaleBoard, RoyalePodium } from "./RoyaleStages";
 
 /**
  * The host's projector screen (P5-10 – P5-14): the phases on a big screen and the
@@ -192,7 +193,7 @@ export function HostScreen({
   }
 
   const canPause = ["countdown", "open", "reveal", "leaderboard"].includes(view.phase);
-  const next = nextStepLabel(view.phase, view.round, view.questionCount);
+  const next = nextStepLabel(view.phase, view.round, view.questionCount, view.royale);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-fg">
@@ -232,14 +233,16 @@ export function HostScreen({
         {view.phase === "countdown" && <CountdownStage view={view} offsetMs={offset} />}
         {view.phase === "open" && <QuestionStage view={view} offsetMs={offset} />}
         {view.phase === "reveal" && <RevealStage view={view} />}
-        {view.phase === "leaderboard" && (
+        {view.phase === "leaderboard" && view.royale && <RoyaleBoard view={view} />}
+        {view.phase === "leaderboard" && !view.royale && (
           <LeaderboardStage
             key={view.round}
             top={view.top}
             showWins={view.mode === "battle_buzzer"}
           />
         )}
-        {view.phase === "podium" && <PodiumStage top={view.top} />}
+        {view.phase === "podium" &&
+          (view.royale ? <RoyalePodium view={view} /> : <PodiumStage top={view.top} />)}
         {view.phase === "ended" && (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
             <h2 className="text-3xl font-bold">Sesi selesai</h2>

@@ -374,3 +374,79 @@ describe("rebutan", () => {
     expect(after.view.winner).toMatchObject({ nickname: "Budi" });
   });
 });
+
+describe("battle royale", () => {
+  const royalePolicy = (patch: Partial<typeof DEFAULT_LIVE_FORM> = {}) =>
+    livePolicyFrom({
+      ...DEFAULT_LIVE_FORM,
+      mode: "battle_royale",
+      lateJoin: "spectator",
+      ...patch,
+    });
+
+  it("names the host's next step by the survivors", () => {
+    expect(nextStepLabel("reveal", 0, 5, { remaining: 1 })).toBe("Podium");
+    expect(nextStepLabel("reveal", 0, 5, { remaining: 3 })).toBe("Papan skor");
+    expect(nextStepLabel("leaderboard", 4, 5, { remaining: 3, suddenDeathEnabled: true })).toBe(
+      "Sudden death",
+    );
+    expect(nextStepLabel("leaderboard", 4, 5, { remaining: 3, suddenDeathEnabled: false })).toBe(
+      "Podium",
+    );
+  });
+
+  it("takes lives, eliminates, keeps spectators playing for shadow points", async () => {
+    const hub = createMemoryHub();
+    const live = createLocalLive(quiz(), royalePolicy({ lives: 1 }), {
+      hub,
+      latencyMs: 0,
+      mode: "battle_royale",
+    });
+    const ani = await live.player.join("Ani");
+    const budi = await live.player.join("Budi");
+    const caca = await live.player.join("Caca");
+    if (!ani.ok || !budi.ok || !caca.ok) throw new Error("join failed");
+    let host = await live.host.state();
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    const q = host.view.question!;
+    await live.player.answer(ani.token, q.id, { selectedIds: ["a"] });
+    await live.player.answer(budi.token, q.id, { selectedIds: ["b"] });
+    await live.player.answer(caca.token, q.id, { selectedIds: ["a"] });
+    host = await live.host.advance(host.view.version, "next"); // reveal
+    if (!host.ok) throw new Error();
+    expect(host.view.royale).toMatchObject({ remaining: 2, total: 3 });
+    expect(host.view.royale?.eliminated.map((e) => e.nickname)).toEqual(["Budi"]);
+
+    const out = await live.player.state(budi.token);
+    if (!out.ok) throw new Error();
+    expect(out.view.you).toMatchObject({ spectator: true, lives: 0, eliminatedRound: 0 });
+
+    // A late joiner only watches (P7-14).
+    const telat = await live.player.join("Telat");
+    if (!telat.ok) throw new Error();
+    const watcher = await live.player.state(telat.token);
+    expect(watcher.ok && watcher.view.you.spectator).toBe(true);
+
+    host = await live.host.advance(host.view.version, "next"); // leaderboard
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next"); // countdown
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next"); // open
+    if (!host.ok) throw new Error();
+    const q2 = host.view.question!;
+    // Budi plays on as a spectator: shadow points, not his score (P7-07).
+    expect(await live.player.answer(budi.token, q2.id, { value: true })).toEqual({ ok: true });
+    host = await live.host.advance(host.view.version, "next"); // reveal: Ani and Caca silent
+    if (!host.ok) throw new Error();
+    // Everyone left would go out at once: nobody does.
+    expect(host.view.royale).toMatchObject({ remaining: 2, eliminated: [] });
+    const shadow = await live.player.state(budi.token);
+    if (!shadow.ok) throw new Error();
+    expect(shadow.view.you.shadowScore).toBeGreaterThan(0);
+    expect(shadow.view.you.score).toBe(0);
+  });
+});

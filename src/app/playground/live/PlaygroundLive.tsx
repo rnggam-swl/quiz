@@ -30,6 +30,9 @@ export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["
         perQuestionS: 20,
         autoAdvance: auto,
         wrongPenalty: mode === "battle_buzzer" ? 100 : 0,
+        lives: 2,
+        shrinkTimerPct: 20,
+        lateJoin: mode === "battle_royale" ? "spectator" : "allow",
       }),
       { hub, mode },
     );
@@ -45,7 +48,14 @@ export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["
   return (
     <div className="flex min-h-dvh flex-col gap-3 bg-surface-muted p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <strong>Playground {mode === "battle_buzzer" ? "rebutan" : "live"}</strong>
+        <strong>
+          Playground{" "}
+          {mode === "battle_buzzer"
+            ? "rebutan"
+            : mode === "battle_royale"
+              ? "battle royale"
+              : "live"}
+        </strong>
         <span className="text-fg-muted">kode {live.code}</span>
         <Button
           size="sm"

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { toast } from "@/components/ui/Toast";
-import { DEFAULT_LIVE_FORM, type LiveForm } from "@/engine/live/form";
+import { DEFAULT_LATE_JOIN, DEFAULT_LIVE_FORM, type LiveForm } from "@/engine/live/form";
 import { cn } from "@/lib/cn";
 
 type Toggle = "shuffleQuestions" | "shuffleOptions" | "autoAdvance";
@@ -38,6 +38,11 @@ const MODES: { value: LiveForm["mode"]; label: string; hint: string }[] = [
     value: "battle_buzzer",
     label: "Rebutan",
     hint: "Yang tercepat benar menang, soal langsung terkunci.",
+  },
+  {
+    value: "battle_royale",
+    label: "Battle Royale",
+    hint: "Salah atau telat = nyawa berkurang; bertahan sampai tinggal satu.",
   },
 ];
 
@@ -80,7 +85,7 @@ export function StartLiveButton({
         description="Buka layar host di proyektor. Peserta bergabung dengan kode di halaman /join."
       >
         <div className="flex flex-col gap-4">
-          <div role="radiogroup" aria-label="Mode" className="grid gap-2 sm:grid-cols-2">
+          <div role="radiogroup" aria-label="Mode" className="grid gap-2 sm:grid-cols-3">
             {MODES.map((m) => (
               <label
                 key={m.value}
@@ -98,7 +103,7 @@ export function StartLiveButton({
                   className="sr-only"
                   checked={form.mode === m.value}
                   disabled={questions[m.value].playable === 0}
-                  onChange={() => set({ mode: m.value })}
+                  onChange={() => set({ mode: m.value, lateJoin: DEFAULT_LATE_JOIN[m.value] })}
                 />
                 <span className="text-sm font-semibold">{m.label}</span>
                 <span className="text-xs text-fg-muted">{m.hint}</span>
@@ -122,6 +127,65 @@ export function StartLiveButton({
                 </li>
               ))}
             </ul>
+          )}
+          {form.mode === "battle_royale" && (
+            <div className="flex flex-col gap-3 rounded-xl bg-surface-muted p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-lives" className="font-normal">
+                  Nyawa
+                </Label>
+                <Select
+                  id="live-lives"
+                  className="w-36"
+                  value={form.lives}
+                  onChange={(e) => set({ lives: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {"❤️".repeat(Math.min(n, 5))} {n}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-shrink" className="font-normal">
+                  Zona menyempit per putaran
+                </Label>
+                <Select
+                  id="live-shrink"
+                  className="w-36"
+                  value={form.shrinkTimerPct}
+                  onChange={(e) => set({ shrinkTimerPct: Number(e.target.value) })}
+                >
+                  <option value={0}>Tidak</option>
+                  <option value={10}>−10% waktu</option>
+                  <option value={20}>−20% waktu</option>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-slowest" className="font-normal">
+                  Jika semua benar, yang paling lambat kehilangan nyawa
+                </Label>
+                <Switch
+                  id="live-slowest"
+                  checked={form.eliminateSlowest}
+                  onCheckedChange={(checked) => set({ eliminateSlowest: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-sudden" className="font-normal">
+                  Sudden death jika soal habis (5 detik, sekali salah tersingkir)
+                </Label>
+                <Switch
+                  id="live-sudden"
+                  checked={form.suddenDeath}
+                  onCheckedChange={(checked) => set({ suddenDeath: checked })}
+                />
+              </div>
+              <p className="text-xs text-fg-subtle">
+                Yang tersingkir tetap bisa menjawab sebagai penonton untuk poin bayangan.
+              </p>
+            </div>
           )}
           {form.mode === "battle_buzzer" && (
             <div className="flex flex-col gap-1">

@@ -15,6 +15,7 @@ import { getDefinition } from "@/questions/registry";
 import { Avatar } from "./Avatar";
 import { choicesOf, isCorrectChoice } from "./choices";
 import { CircleTimer } from "./CircleTimer";
+import { Eliminated, RoyaleCounter } from "./RoyaleStages";
 import { useNow } from "./hooks";
 
 // The projector's big screens, one per phase (docs/09-mode-live.md, P5-10 – P5-13).
@@ -208,8 +209,12 @@ export function QuestionStage({ view, offsetMs }: { view: HostView; offsetMs: nu
           offsetMs={offsetMs}
           paused={view.paused}
           pausedRemainingMs={view.pausedRemainingMs}
+          alarm={!!view.royale && (view.royale.shrinking || view.royale.suddenDeath)}
         />
-        <Prompt view={view} />
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-4">
+          {view.royale && <RoyaleCounter view={view} />}
+          <Prompt view={view} />
+        </div>
         <div
           className="flex size-28 shrink-0 flex-col items-center justify-center rounded-full bg-surface shadow-card"
           aria-live="polite"
@@ -240,6 +245,7 @@ export function RevealStage({ view }: { view: HostView }) {
   return (
     <div className="flex flex-1 flex-col gap-6">
       {view.mode === "battle_buzzer" && <WinnerBanner view={view} />}
+      {view.royale && <Eliminated view={view} />}
       <Prompt view={view} />
       {choices ? (
         <ChoiceGrid view={view} reveal={reveal} />

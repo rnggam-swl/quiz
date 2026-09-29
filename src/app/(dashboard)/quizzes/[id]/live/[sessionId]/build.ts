@@ -37,6 +37,7 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
   if (!session?.quiz_version_id) notFound();
 
   const battle = session.mode !== "live";
+  const royale = session.mode === "battle_royale";
   const [{ data: version }, participants, rounds, rows, battleRows, winners] = await Promise.all([
     supabase
       .from("quiz_versions")
@@ -46,7 +47,7 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
     all((from, to) =>
       supabase
         .from("participants")
-        .select("id, nickname, kicked_at, is_spectator")
+        .select("id, nickname, kicked_at, is_spectator, lives, eliminated_round, shadow_score")
         .eq("session_id", sessionId)
         .order("joined_at")
         .range(from, to),
@@ -77,7 +78,7 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
           supabase
             .from("battle_answers")
             .select(
-              "id, participant_id, answer, correct, points, reaction_ms, battle_rounds!inner(session_id, question_id)",
+              "id, participant_id, answer, correct, points, reaction_ms, shadow, battle_rounds!inner(session_id, question_id)",
             )
             .eq("battle_rounds.session_id", sessionId)
             .order("id")
@@ -97,13 +98,16 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
   const snapshot = parseSnapshot(version?.snapshot);
   if (!snapshot) notFound();
 
-  const players = participants
-    .filter((p) => !p.kicked_at && !p.is_spectator)
-    .map((p) => ({ id: p.id, nickname: p.nickname }));
+  // Royale: the eliminated are spectators now but played; late watchers didn't.
+  const playedIn = (p: (typeof participants)[number]) =>
+    !p.kicked_at && (!p.is_spectator || (royale && p.eliminated_round !== null));
+  const players = participants.filter(playedIn).map((p) => ({ id: p.id, nickname: p.nickname }));
+  const byParticipant = new Map(participants.map((p) => [p.id, p]));
   const playerIds = new Set(players.map((p) => p.id));
   const responses: (LiveResponse & { answer: unknown })[] = battle
     ? battleRows
-        .filter((r) => playerIds.has(r.participant_id))
+        // A spectator's answers are shadow points: not part of the standings.
+        .filter((r) => playerIds.has(r.participant_id) && !r.shadow)
         .map((r) => ({
           participantId: r.participant_id,
           questionId: r.battle_rounds.question_id,
@@ -129,9 +133,26 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
   // Rounds that actually opened, in the order they were played.
   const played = rounds.filter((r) => r.opened_at).map((r) => r.question_id);
 
-  const standings: LiveStandingRow[] = liveStandings(players, responses, played).map((row) =>
-    battle ? { ...row, wins: wins.get(row.id) ?? 0 } : row,
+  let standings: LiveStandingRow[] = liveStandings(players, responses, played).map((row) =>
+    battle && !royale ? { ...row, wins: wins.get(row.id) ?? 0 } : row,
   );
+  if (royale) {
+    // Royale ranks by survival, not points (royale_standings, docs/10).
+    const { data: ranking } = await supabase.rpc("royale_standings", { p_session_id: sessionId });
+    const rankOf = new Map((ranking ?? []).map((r) => [r.participant_id, r.rank]));
+    standings = standings
+      .map((row) => {
+        const p = byParticipant.get(row.id);
+        return {
+          ...row,
+          rank: rankOf.get(row.id) ?? row.rank,
+          lives: p?.lives ?? 0,
+          eliminatedRound: p?.eliminated_round ?? null,
+          shadowScore: p?.shadow_score ?? 0,
+        };
+      })
+      .sort((a, b) => a.rank - b.rank);
+  }
   const replay = leaderboardReplay(players, responses, played);
   const byId = new Map(snapshot.questions.map((q) => [q.id, q]));
   const questions = played.map((id) => byId.get(id)).filter((q) => !!q);
@@ -151,6 +172,7 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
     session,
     title: session.quizzes.title || snapshot.quiz.title,
     battle,
+    royale,
     standings,
     replay: replay.map((frame) => ({
       ...frame,
@@ -168,6 +190,9 @@ export function standingsCsv(rows: LiveStandingRow[]): string {
       "Nama",
       "Skor",
       "Soal dimenangkan",
+      "Bertahan sampai putaran",
+      "Nyawa tersisa",
+      "Poin bayangan",
       "Benar",
       "Dijawab",
       "Ketepatan (%)",
@@ -178,6 +203,13 @@ export function standingsCsv(rows: LiveStandingRow[]): string {
       r.nickname,
       r.score,
       r.wins ?? null,
+      r.lives === undefined
+        ? null
+        : r.eliminatedRound === null
+          ? "akhir"
+          : (r.eliminatedRound ?? 0) + 1,
+      r.lives ?? null,
+      r.shadowScore ?? null,
       r.correct,
       r.answered,
       r.accuracy,

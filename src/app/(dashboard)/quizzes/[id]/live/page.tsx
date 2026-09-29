@@ -64,8 +64,9 @@ export default async function LiveSessionsPage({ params }: PageProps<"/quizzes/[
   const questions: ModeQuestions = {
     live: listFor(snapshot, "live"),
     battle_buzzer: listFor(snapshot, "battle_buzzer"),
+    battle_royale: listFor(snapshot, "battle_royale"),
   };
-  const playable = Math.max(questions.live.playable, questions.battle_buzzer.playable);
+  const playable = Math.max(...Object.values(questions).map((m) => m.playable));
 
   return (
     <>
@@ -80,11 +81,12 @@ export default async function LiveSessionsPage({ params }: PageProps<"/quizzes/[
               <ArrowLeft className="size-4" /> Kembali ke editor
             </Link>
             <h1 className="text-2xl font-semibold">
-              Live & Rebutan · {quiz.title || "Quiz tanpa judul"}
+              Live & Battle · {quiz.title || "Quiz tanpa judul"}
             </h1>
             <p className="text-sm text-fg-muted">
               Soal tampil di proyektor, peserta menjawab di HP: live klasik (ketepatan dan
-              kecepatan) atau rebutan (yang tercepat benar menang).
+              kecepatan), rebutan (yang tercepat benar menang), atau battle royale (bertahan sampai
+              tinggal satu).
             </p>
           </div>
           {snapshot && playable > 0 && <StartLiveButton quizId={id} questions={questions} />}

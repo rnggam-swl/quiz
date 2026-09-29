@@ -100,6 +100,7 @@ export type Database = {
           reaction_ms: number | null
           received_at: string
           round_id: string
+          shadow: boolean
         }
         Insert: {
           answer: Json
@@ -110,6 +111,7 @@ export type Database = {
           reaction_ms?: number | null
           received_at?: string
           round_id: string
+          shadow: boolean
         }
         Update: {
           answer?: Json
@@ -120,6 +122,7 @@ export type Database = {
           reaction_ms?: number | null
           received_at?: string
           round_id?: string
+          shadow?: boolean
         }
         Relationships: [
           {
@@ -216,44 +219,53 @@ export type Database = {
       }
       participants: {
         Row: {
+          eliminated_round: number | null
           external_id: string | null
           id: string
           is_spectator: boolean
           joined_at: string
           kicked_at: string | null
           last_seen_at: string | null
+          lives: number | null
           nickname: string
           roster_id: string | null
           score: number
           session_id: string
+          shadow_score: number
           streak: number
           user_id: string | null
         }
         Insert: {
+          eliminated_round: number | null
           external_id?: string | null
           id?: string
           is_spectator?: boolean
           joined_at?: string
           kicked_at?: string | null
           last_seen_at?: string | null
+          lives: number | null
           nickname: string
           roster_id?: string | null
           score?: number
           session_id: string
+          shadow_score: number
           streak?: number
           user_id?: string | null
         }
         Update: {
+          eliminated_round?: number | null
           external_id?: string | null
           id?: string
           is_spectator?: boolean
           joined_at?: string
           kicked_at?: string | null
           last_seen_at?: string | null
+          lives?: number | null
           nickname?: string
           roster_id?: string | null
           score?: number
           session_id?: string
+          shadow_score?: number
           streak?: number
           user_id?: string | null
         }
@@ -893,16 +905,19 @@ export type Database = {
           p_user_id?: string
         }
         Returns: {
+          eliminated_round: number | null
           external_id: string | null
           id: string
           is_spectator: boolean
           joined_at: string
           kicked_at: string | null
           last_seen_at: string | null
+          lives: number | null
           nickname: string
           roster_id: string | null
           score: number
           session_id: string
+          shadow_score: number
           streak: number
           user_id: string | null
         }
@@ -916,16 +931,19 @@ export type Database = {
       join_live: {
         Args: { p_nickname: string; p_session_id: string }
         Returns: {
+          eliminated_round: number | null
           external_id: string | null
           id: string
           is_spectator: boolean
           joined_at: string
           kicked_at: string | null
           last_seen_at: string | null
+          lives: number | null
           nickname: string
           roster_id: string | null
           score: number
           session_id: string
+          shadow_score: number
           streak: number
           user_id: string | null
         }
@@ -943,16 +961,19 @@ export type Database = {
           p_session_id: string
         }
         Returns: {
+          eliminated_round: number | null
           external_id: string | null
           id: string
           is_spectator: boolean
           joined_at: string
           kicked_at: string | null
           last_seen_at: string | null
+          lives: number | null
           nickname: string
           roster_id: string | null
           score: number
           session_id: string
+          shadow_score: number
           streak: number
           user_id: string | null
         }
@@ -1004,6 +1025,17 @@ export type Database = {
         Returns: Json
       }
       record_live_answer: {
+        Args: {
+          p_answer: Json
+          p_base_points: number
+          p_correct: number
+          p_participant_id: string
+          p_question_id: string
+          p_total: number
+        }
+        Returns: Json
+      }
+      record_royale_answer: {
         Args: {
           p_answer: Json
           p_base_points: number
@@ -1074,6 +1106,21 @@ export type Database = {
         }
       }
       reset_attempt: { Args: { p_attempt_id: string }; Returns: undefined }
+      royale_standings: {
+        Args: { p_session_id: string }
+        Returns: {
+          alive: boolean
+          avg_ms: number
+          eliminated_round: number
+          lives: number
+          nickname: string
+          participant_id: string
+          rank: number
+          score: number
+          shadow_score: number
+          watcher: boolean
+        }[]
+      }
       save_quiz_draft: {
         Args: {
           p_base_revision: number

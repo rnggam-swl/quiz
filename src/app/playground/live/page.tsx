@@ -7,7 +7,8 @@ export const metadata: Metadata = { title: "Live (playground)" };
 
 /**
  * Live mode on the in-memory engine: projector + two phones + bots.
- * ?auto=1 = auto-advance, ?mode=rebutan = Rebutan (penalty 100).
+ * ?auto=1 = auto-advance, ?mode=rebutan = Rebutan (penalty 100), ?mode=royale = Battle Royale
+ * (2 lives, the zone shrinks 20% a round, sudden death).
  */
 export default async function PlaygroundLivePage({ searchParams }: PageProps<"/playground/live">) {
   if (process.env.NODE_ENV === "production") notFound();
@@ -15,7 +16,13 @@ export default async function PlaygroundLivePage({ searchParams }: PageProps<"/p
   return (
     <PlaygroundLive
       auto={params.auto === "1"}
-      mode={params.mode === "rebutan" ? "battle_buzzer" : "live"}
+      mode={
+        params.mode === "rebutan"
+          ? "battle_buzzer"
+          : params.mode === "royale"
+            ? "battle_royale"
+            : "live"
+      }
     />
   );
 }

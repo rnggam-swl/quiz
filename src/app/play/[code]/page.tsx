@@ -34,7 +34,11 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
     );
   }
 
-  if (ctx.session.mode === "live" || ctx.session.mode === "battle_buzzer") {
+  if (
+    ctx.session.mode === "live" ||
+    ctx.session.mode === "battle_buzzer" ||
+    ctx.session.mode === "battle_royale"
+  ) {
     return (
       <LivePlayClient
         sessionId={ctx.session.id}

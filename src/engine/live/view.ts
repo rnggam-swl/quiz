@@ -88,6 +88,7 @@ function baseView(
       q && SHOWS_QUESTION.has(raw.phase) ? toPlayQuestion(q, Number(raw.seed ?? 0), policy) : null,
     reveal,
     winner: raw.winner ?? null,
+    royale: raw.royale ? { ...raw.royale, suddenDeathEnabled: policy.royale.suddenDeath } : null,
     top: raw.top ?? [],
     serverNow: new Date(now).toISOString(),
   };
@@ -111,19 +112,23 @@ export function playerView(
   if (!you) return null;
   const mine = you.answer;
   // Rebutan answers get their verdict at once (one chance: wrong = locked out, right =
-  // the round is over), so only live keeps it until the reveal.
-  const out = RESULTS_OUT.has(raw.phase) || (raw.mode ?? "live") !== "live";
+  // the round is over); live and royale keep it until the reveal.
+  const out = RESULTS_OUT.has(raw.phase) || raw.mode === "battle_buzzer";
   const hide = !out && !!mine;
   return {
     ...baseView(raw, snapshot, null, now),
     you: {
       id: you.id,
       nickname: you.nickname,
-      score: hide ? you.score - mine.points : you.score,
+      // A spectator's points went to the shadow score (royale), not the score.
+      score: hide && !you.spectator ? you.score - mine.points : you.score,
       rank: hide ? null : you.rank,
       streak: hide ? null : you.streak,
       kicked: you.kicked,
       spectator: you.spectator,
+      lives: you.lives ?? null,
+      eliminatedRound: you.eliminatedRound ?? null,
+      shadowScore: (you.shadowScore ?? 0) - (hide && you.spectator ? mine.points : 0),
       answered: !!mine,
       answer: mine?.answer ?? null,
       result:

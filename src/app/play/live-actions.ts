@@ -73,7 +73,9 @@ export async function answerLiveAction(
     return answerBuzzer(claims, info, snapshot, q, graded);
   }
 
-  const { error } = await createAdminClient().rpc("record_live_answer", {
+  // Live and royale: the verdict waits for the reveal (royale spectators score shadow points).
+  const rpc = info.mode === "battle_royale" ? "record_royale_answer" : "record_live_answer";
+  const { error } = await createAdminClient().rpc(rpc, {
     p_participant_id: claims.participantId,
     p_question_id: q.id,
     p_answer: graded.answer as Json,
