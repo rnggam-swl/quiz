@@ -26,6 +26,10 @@ export type LiveStandingRow = {
   avgTimeMs: number | null;
   /** Rebutan: questions won. */
   wins?: number;
+  /** Royale: lives left, the round they went out in (null = survived), shadow points. */
+  lives?: number;
+  eliminatedRound?: number | null;
+  shadowScore?: number;
 };
 
 const ratio = (r: LiveResponse) =>

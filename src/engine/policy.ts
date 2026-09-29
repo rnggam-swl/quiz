@@ -63,6 +63,16 @@ export const policySchema = z.object({
     /** Points taken for a wrong answer (never below a score of 0). */
     wrongPenalty: z.number().int().min(0).max(10_000),
   }),
+  /** Battle royale (docs/10-mode-battle.md#battle-royale). */
+  royale: z.object({
+    lives: z.number().int().min(1).max(10),
+    /** If everyone left was right, the slowest loses a life (so it can't stall). */
+    eliminateSlowest: z.boolean(),
+    /** Each round gets this much less time than the one before (never under 5 s). */
+    shrinkTimerPct: z.number().int().min(0).max(50),
+    /** Out of questions with several survivors: replay them, 5 s, one mistake is out. */
+    suddenDeath: z.boolean(),
+  }),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -84,6 +94,7 @@ const PRACTICE: Policy = {
   autoAdvance: false,
   lateJoin: "allow",
   buzzer: { variant: "first_correct", holdS: 5, wrongPenalty: 0 },
+  royale: { lives: 3, eliminateSlowest: false, shrinkTimerPct: 10, suddenDeath: true },
 };
 
 /** Defaults per mode; later phases fill in their own (exam P4, live P5, battle P6–P7). */
@@ -113,6 +124,8 @@ export const DEFAULT_POLICIES: Record<SessionMode, Policy> = {
   battle_royale: {
     ...PRACTICE,
     scoring: "elimination",
+    // Joining after the start means watching (docs/10 · Kasus khusus).
+    lateJoin: "spectator",
     shuffleOptions: false,
     timer: { perQuestionS: 20 },
   },

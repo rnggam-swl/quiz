@@ -19,11 +19,13 @@ export default async function LiveReportPage({
   params,
 }: PageProps<"/quizzes/[id]/live/[sessionId]">) {
   const { id, sessionId } = await params;
-  const { user, session, title, battle, standings, replay, items, questionCount } =
+  const { user, session, title, battle, royale, standings, replay, items, questionCount } =
     await buildLiveReport(id, sessionId);
-  const headers = battle
-    ? ["#", "Peserta", "Skor", "Menang", "Benar", "Ketepatan", "Rata-rata waktu"]
-    : ["#", "Peserta", "Skor", "Benar", "Ketepatan", "Rata-rata waktu"];
+  const headers = royale
+    ? ["#", "Peserta", "Bertahan", "Nyawa", "Skor", "Benar", "Ketepatan", "Poin bayangan"]
+    : battle
+      ? ["#", "Peserta", "Skor", "Menang", "Benar", "Ketepatan", "Rata-rata waktu"]
+      : ["#", "Peserta", "Skor", "Benar", "Ketepatan", "Rata-rata waktu"];
   const csv = `/quizzes/${id}/live/${sessionId}/csv`;
   const average = standings.length
     ? Math.round(standings.reduce((s, r) => s + r.accuracy, 0) / standings.length)
@@ -42,7 +44,8 @@ export default async function LiveReportPage({
               <ArrowLeft className="size-4" /> Sesi live
             </Link>
             <h1 className="text-2xl font-semibold">
-              {battle ? "Laporan rebutan" : "Laporan live"} · {title}
+              {royale ? "Laporan battle royale" : battle ? "Laporan rebutan" : "Laporan live"} ·{" "}
+              {title}
             </h1>
             <p className="text-sm text-fg-muted">
               <LocalTime iso={session.created_at} />
@@ -96,14 +99,26 @@ export default async function LiveReportPage({
                     <tr key={r.id}>
                       <td className="px-4 py-3 font-semibold tabular-nums">{r.rank}</td>
                       <td className="px-4 py-3 font-medium">{r.nickname}</td>
+                      {royale && (
+                        <>
+                          <td className="px-4 py-3">
+                            {r.eliminatedRound === null || r.eliminatedRound === undefined
+                              ? "Sampai akhir"
+                              : `Putaran ${r.eliminatedRound + 1}`}
+                          </td>
+                          <td className="px-4 py-3 tabular-nums">{r.lives ?? 0}</td>
+                        </>
+                      )}
                       <td className="px-4 py-3 font-semibold tabular-nums">{r.score}</td>
-                      {battle && <td className="px-4 py-3 tabular-nums">{r.wins ?? 0}</td>}
+                      {battle && !royale && (
+                        <td className="px-4 py-3 tabular-nums">{r.wins ?? 0}</td>
+                      )}
                       <td className="px-4 py-3 tabular-nums">
                         {r.correct}/{replay.length}
                       </td>
                       <td className="px-4 py-3 tabular-nums">{r.accuracy}%</td>
                       <td className="px-4 py-3 text-fg-muted tabular-nums">
-                        {seconds(r.avgTimeMs)}
+                        {royale ? (r.shadowScore ?? 0) : seconds(r.avgTimeMs)}
                       </td>
                     </tr>
                   ))}

@@ -48,35 +48,46 @@ Pilihan Ganda, Benar/Salah, Odd One Out. Isian dan Angka boleh dipakai, tapi dia
 
 ---
 
-## Battle Royale
+## Battle Royale ✅ P7
 
 ### Aturan
 
-- Semua peserta aktif menjawab setiap putaran, masing-masing satu kesempatan.
-- Saat putaran terkunci, `resolve_round` berjalan:
+- Nyawa diberikan saat host menekan **Mulai** (`policy.royale.lives`, default 3; pilihan 1/2/3/5 di dialog).
+- Semua peserta yang masih bertahan menjawab setiap putaran, masing-masing satu kesempatan (`battle_answers`). Benar/salah baru terlihat saat reveal, seperti live. Jawaban benar mendapat poin kecepatan (formula live) sebagai skor sampingan.
+- Saat putaran terkunci (timer habis, semua sudah menjawab, atau host menutup soal), `advance_live` menjalankan `resolve_royale_round`:
   - Salah atau tidak menjawab: `lives − 1`.
   - Opsional `eliminateSlowest`: jika **semua** yang tersisa benar, peserta paling lambat kehilangan 1 nyawa, supaya permainan tidak macet.
   - `lives = 0`: `eliminated_round = idx`, `is_spectator = true`.
-- **Zona menyempit:** batas waktu putaran berikutnya = sebelumnya × (1 − `shrinkTimerPct`), dengan batas bawah 5 detik.
-- Default: 3 nyawa, `shrinkTimerPct` 10%.
+- **Zona menyempit:** batas waktu putaran ke-n = batas soal × (1 − `shrinkTimerPct`)ⁿ, dengan batas bawah 5 detik. Proyektor menampilkan "Zona menyempit!" dan timer menjadi merah. Default `shrinkTimerPct` 10% (pilihan 0/10/20%).
+- **Peringkat** (`royale_standings`): yang masih bertahan dulu (nyawa terbanyak), lalu yang tersingkir (yang keluar belakangan lebih tinggi); seri dipecah dengan rata-rata waktu jawaban benar, lalu siapa yang masuk lebih dulu. Selalu tepat satu peringkat 1.
 
 ### Kasus khusus (wajib)
 
-| Kasus                                                      | Aturan                                                                                                                                                             |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Semua peserta tersisa kehabisan nyawa di putaran yang sama | Putaran dibatalkan untuk eliminasi: nyawa dikembalikan ke 1, lanjut ke putaran berikutnya                                                                          |
-| Tersisa 1 peserta                                          | Langsung ke podium, dia pemenangnya                                                                                                                                |
-| Soal habis dan masih ada > 1 peserta                       | Jika `suddenDeath`: ulang soal dari bank dengan timer 5 detik, satu kesalahan langsung tersingkir. Jika tidak: ranking berdasarkan nyawa, lalu total `reaction_ms` |
-| Peserta masuk setelah mulai                                | `lateJoin = 'spectator'` (default)                                                                                                                                 |
-| Peserta terputus                                           | Tetap aktif. Tidak menjawab = kehilangan nyawa seperti biasa                                                                                                       |
+| Kasus                                                      | Aturan                                                                                                                                                                                       |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Semua peserta tersisa kehabisan nyawa di putaran yang sama | Putaran dibatalkan untuk eliminasi: nyawa dikembalikan ke 1, lanjut ke putaran berikutnya                                                                                                    |
+| Tersisa 1 peserta                                          | Setelah reveal langsung ke podium, dia pemenangnya                                                                                                                                           |
+| Soal habis dan masih ada > 1 peserta                       | Jika `suddenDeath` (default nyala): soal diulang dengan timer 5 detik, sekali salah langsung tersingkir, maksimal 10 putaran tambahan. Jika tidak (atau sudah 10 putaran): peringkat di atas |
+| Peserta masuk setelah mulai                                | `lateJoin = 'spectator'` (default royale): menonton dan bisa menjawab untuk poin bayangan, dengan penjelasan di HP                                                                           |
+| Peserta terputus                                           | Tetap aktif. Tidak menjawab = kehilangan nyawa seperti biasa                                                                                                                                 |
 
 ### Penonton
 
-Peserta yang tersingkir tetap bisa menjawab untuk **poin bayangan** dan melihat "X tersisa". Di layar akhir ada peringkat penonton terbaik, supaya peserta yang gugur (apalagi anak-anak) tetap terlibat.
+Peserta yang tersingkir (dan yang masuk terlambat) tetap bisa menjawab untuk **poin bayangan** (`participants.shadow_score`, `battle_answers.shadow`): tidak memengaruhi nyawa, jumlah yang menjawab, maupun peringkat utama. HP menampilkan "Kamu bertahan sampai putaran N! Tetap main untuk poin bayangan". Di podium ada tiga penonton terbaik, supaya peserta yang gugur (apalagi anak-anak) tetap terlibat.
 
 ### Tipe soal
 
 Semua yang cepat dijawab: Pilihan Ganda, Benar/Salah, Isian, Angka, Slider, Odd One Out. Sequencing, Grouping, dan Guess the Blank boleh dipakai dengan timer lebih panjang.
+
+### Implementasi (P7)
+
+| Bagian        | Lokasi                                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migrasi & RPC | `supabase/migrations/20260930000000_battle_royale.sql`: `resolve_royale_round`, `record_royale_answer`, `royale_standings`, `advance_live` dan `live_state` dengan aturan royale |
+| Test          | `supabase/tests/royale.test.ts`: setiap kasus khusus + simulasi 100 bot sampai podium (selalu tepat 1 pemenang)                                                                  |
+| Layar         | `src/components/live/RoyaleStages.tsx` (penghitung "12 / 40 tersisa", grid avatar, podium royale), HUD nyawa dan layar tersingkir di `LivePlayer`                                |
+| Playground    | `/playground/live?mode=royale` (2 nyawa, zona −20%, bot)                                                                                                                         |
+| Event         | Tidak ada event baru: `state` bertanda tangan membawa `royale` (tersisa, total, siapa yang tersingkir, zona, sudden death); nyawa pribadi diambil saat reveal                    |
 
 ---
 
@@ -158,13 +169,12 @@ Versi pertama memakai urutan tiba di server. Setelah itu, tambahkan dua perbaika
 
 ## Event realtime tambahan
 
-Rebutan tidak butuh event baru: kemenangan memindahkan sesi ke `reveal`, dan Server Action pemenang mem-broadcast `state` bertanda tangan ([09 · Realtime](09-mode-live.md#realtime-sessionid)) yang membawa `winner`. Proyektor dan semua HP langsung tahu siapa yang tercepat.
+Rebutan dan battle royale tidak butuh event baru (royale: `state` bertanda tangan membawa siapa yang tersingkir dan jumlah yang tersisa).
+Untuk rebutan: kemenangan memindahkan sesi ke `reveal`, dan Server Action pemenang mem-broadcast `state` bertanda tangan ([09 · Realtime](09-mode-live.md#realtime-sessionid)) yang membawa `winner`. Proyektor dan semua HP langsung tahu siapa yang tercepat.
 
-| Event        | Payload                                             |
-| ------------ | --------------------------------------------------- |
-| `buzz_hold`  | `{ participantId, nickname, expiresAt }` (varian B) |
-| `eliminated` | `{ participants: [{ id, nickname }], remaining }`   |
-| `lives`      | per peserta: `{ lives }`                            |
+| Event       | Payload                                             |
+| ----------- | --------------------------------------------------- |
+| `buzz_hold` | `{ participantId, nickname, expiresAt }` (varian B) |
 
 ## UX
 

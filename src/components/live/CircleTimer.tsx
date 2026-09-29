@@ -12,6 +12,7 @@ export function CircleTimer({
   offsetMs,
   paused,
   pausedRemainingMs,
+  alarm,
   className,
 }: {
   closesAt: string | null;
@@ -19,6 +20,8 @@ export function CircleTimer({
   offsetMs: number;
   paused: boolean;
   pausedRemainingMs: number | null;
+  /** Always red (royale's shrinking zone). */
+  alarm?: boolean;
   className?: string;
 }) {
   const now = useNow(200, !paused && !!closesAt);
@@ -46,7 +49,7 @@ export function CircleTimer({
           strokeDashoffset={circumference * (1 - fraction)}
           className={cn(
             "transition-[stroke-dashoffset] duration-200 ease-linear",
-            seconds <= 5 ? "stroke-danger" : "stroke-accent",
+            alarm || seconds <= 5 ? "stroke-danger" : "stroke-accent",
           )}
         />
       </svg>

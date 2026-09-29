@@ -36,6 +36,8 @@ type LocalAnswer = {
   total: number;
   points: number;
   timeMs: number;
+  /** Royale: a spectator's answer (shadow points). */
+  shadow: boolean;
 };
 
 type LocalPlayer = {
@@ -47,7 +49,11 @@ type LocalPlayer = {
   spectator: boolean;
   joinedAt: number;
   wins: number;
-  answers: Map<string, LocalAnswer>;
+  lives: number | null;
+  eliminatedRound: number | null;
+  shadowScore: number;
+  /** By round index (royale's sudden death asks a question again). */
+  answers: Map<number, LocalAnswer>;
 };
 
 type Round = {
@@ -117,10 +123,62 @@ export function createLocalLive(
     s.pausedRemaining = null;
   }
 
+  /** Royale ranking, as royale_standings(): survivors, then later out first. */
+  function royaleRanking(): LocalPlayer[] {
+    const avg = (p: LocalPlayer) => {
+      const right = [...p.answers.values()].filter((a) => a.correct >= 1 && !a.shadow);
+      return right.length ? right.reduce((sum, a) => sum + a.timeMs, 0) / right.length : Infinity;
+    };
+    return [...players.values()]
+      .filter((p) => !p.kicked && (!p.spectator || p.eliminatedRound !== null))
+      .sort(
+        (a, b) =>
+          Number(a.spectator) - Number(b.spectator) ||
+          (b.spectator ? 0 : (b.lives ?? 0) - (a.lives ?? 0)) ||
+          (b.eliminatedRound ?? -1) - (a.eliminatedRound ?? -1) ||
+          avg(a) - avg(b) ||
+          a.joinedAt - b.joinedAt,
+      );
+  }
+
+  function royaleInfo(): RawLiveState["royale"] {
+    const everyone = [...players.values()].filter((p) => !p.kicked);
+    return {
+      startLives: policy.royale.lives,
+      remaining: active().length,
+      total: everyone.filter((p) => !p.spectator || p.eliminatedRound !== null).length,
+      suddenDeath: s.round !== null && s.round >= questionIds.length,
+      shrinking: !!current() && current()!.limitMs < baseLimit(s.round!),
+      eliminated: everyone
+        .filter((p) => p.eliminatedRound !== null && p.eliminatedRound === s.round)
+        .map((p) => ({ id: p.id, nickname: p.nickname })),
+      spectators: ["podium", "ended"].includes(s.phase)
+        ? everyone
+            .filter((p) => p.spectator && p.shadowScore > 0)
+            .sort((a, b) => b.shadowScore - a.shadowScore)
+            .slice(0, 3)
+            .map((p) => ({ id: p.id, nickname: p.nickname, score: p.shadowScore }))
+        : [],
+    };
+  }
+
   function standings(): Standing[] {
-    const round = current();
+    if (mode === "battle_royale") {
+      return royaleRanking()
+        .slice(0, 5)
+        .map((p, i) => ({
+          id: p.id,
+          nickname: p.nickname,
+          score: p.score,
+          delta: 0,
+          rank: i + 1,
+          prevRank: i + 1,
+          lives: p.lives ?? 0,
+          eliminatedRound: p.eliminatedRound,
+        }));
+    }
     const rows = active().map((p) => {
-      const delta = round ? (p.answers.get(round.questionId)?.points ?? 0) : 0;
+      const delta = s.round === null ? 0 : (p.answers.get(s.round)?.points ?? 0);
       return { id: p.id, nickname: p.nickname, score: p.score, delta, wins: p.wins };
     });
     const rankBy = (value: (r: (typeof rows)[number]) => number) => (r: (typeof rows)[number]) =>
@@ -136,7 +194,7 @@ export function createLocalLive(
   function raw(participantId?: string): RawLiveState {
     const round = current();
     const you = participantId ? players.get(participantId) : undefined;
-    const mine = you && round ? you.answers.get(round.questionId) : undefined;
+    const mine = you && s.round !== null ? you.answers.get(s.round) : undefined;
     const winner = round?.winner ? players.get(round.winner) : undefined;
     return {
       sessionId,
@@ -162,10 +220,14 @@ export function createLocalLive(
       lobbyLocked: s.lobbyLocked,
       autoAdvance: s.autoAdvance,
       players: active().length,
-      answered: round
-        ? [...players.values()].filter((p) => !p.kicked && p.answers.has(round.questionId)).length
-        : 0,
+      answered:
+        round && s.round !== null
+          ? [...players.values()].filter(
+              (p) => !p.kicked && p.answers.has(s.round!) && !p.answers.get(s.round!)!.shadow,
+            ).length
+          : 0,
       top: ["leaderboard", "podium", "ended"].includes(s.phase) ? standings() : [],
+      ...(mode === "battle_royale" && { royale: royaleInfo() }),
       ...(you && {
         you: {
           id: you.id,
@@ -174,7 +236,13 @@ export function createLocalLive(
           streak: you.streak,
           kicked: you.kicked,
           spectator: you.spectator,
-          rank: 1 + active().filter((o) => o.score > you.score).length,
+          lives: you.lives,
+          eliminatedRound: you.eliminatedRound,
+          shadowScore: you.shadowScore,
+          rank:
+            mode === "battle_royale"
+              ? royaleRanking().indexOf(you) + 1
+              : 1 + active().filter((o) => o.score > you.score).length,
           answer: mine ? { ...mine } : null,
         },
       }),
@@ -186,18 +254,30 @@ export function createLocalLive(
     const round = current();
     return hostView(r, snapshot, {
       roster:
-        s.phase === "lobby"
-          ? active()
+        mode === "battle_royale"
+          ? [...players.values()]
+              .filter((p) => !p.kicked && (!p.spectator || p.eliminatedRound !== null))
               .sort((a, b) => a.joinedAt - b.joinedAt)
-              .map((p) => ({ id: p.id, nickname: p.nickname }))
-          : [],
+              .map((p) => ({
+                id: p.id,
+                nickname: p.nickname,
+                lives: p.lives,
+                eliminatedRound: p.eliminatedRound,
+              }))
+          : s.phase === "lobby"
+            ? active()
+                .sort((a, b) => a.joinedAt - b.joinedAt)
+                .map((p) => ({ id: p.id, nickname: p.nickname }))
+            : [],
       answers:
         s.phase === "reveal" && round
           ? [...players.values()]
               .filter((p) => !p.kicked)
               .flatMap((p) => {
-                const a = p.answers.get(round.questionId);
-                return a ? [{ answer: a.answer, correct: a.correct, total: a.total }] : [];
+                const a = p.answers.get(s.round!);
+                return a && !a.shadow
+                  ? [{ answer: a.answer, correct: a.correct, total: a.total }]
+                  : [];
               })
           : null,
     });
@@ -211,7 +291,7 @@ export function createLocalLive(
       return { error: "round_closed" };
     if (round.closesAt !== null && Date.now() > round.closesAt + ANSWER_GRACE_MS)
       return { error: "deadline_passed" };
-    if (p.answers.has(questionId)) return { error: "already_answered" };
+    if (p.answers.has(s.round!)) return { error: "already_answered" };
     const q = snapshot.questions.find((x) => x.id === questionId)!;
     const graded = gradeAnswer(q, raw);
     if (!graded) return { error: "invalid" };
@@ -225,10 +305,34 @@ export function createLocalLive(
     if (mode === "battle_buzzer") {
       return buzz(p, round, q.points, graded.answer, ratio >= 1, elapsed);
     }
+    if (mode === "battle_royale") {
+      // As record_royale_answer: speed points, or shadow points for spectators.
+      const points = speedPoints(q.points, ratio, elapsed, round.limitMs);
+      const shadow = p.spectator;
+      const right = total > 0 && ratio >= 1 ? 1 : 0;
+      p.answers.set(s.round!, {
+        answer: graded.answer,
+        correct: right,
+        total: 1,
+        points,
+        timeMs: elapsed,
+        shadow,
+      });
+      if (shadow) p.shadowScore += points;
+      else p.score += points;
+      return {};
+    }
     const streak = nextStreak(p.streak, ratio, total);
     const bonus = total > 0 && ratio >= 1 ? streakBonus(streak) : 0;
     const points = speedPoints(q.points, ratio, elapsed, round.limitMs) + bonus;
-    p.answers.set(questionId, { answer: graded.answer, correct, total, points, timeMs: elapsed });
+    p.answers.set(s.round!, {
+      answer: graded.answer,
+      correct,
+      total,
+      points,
+      timeMs: elapsed,
+      shadow: false,
+    });
     p.score += points;
     p.streak = streak;
     return {};
@@ -256,7 +360,14 @@ export function createLocalLive(
       p.score += points;
       p.streak = 0;
     }
-    p.answers.set(round.questionId, { answer, correct: correct ? 1 : 0, total: 1, points, timeMs });
+    p.answers.set(s.round!, {
+      answer,
+      correct: correct ? 1 : 0,
+      total: 1,
+      points,
+      timeMs,
+      shadow: false,
+    });
     if (correct) {
       setPhase("reveal", REVEAL_MS);
       bump();
@@ -298,6 +409,52 @@ export function createLocalLive(
     }
   }
 
+  /** A question's own time, or the session timer. */
+  function baseLimit(idx: number): number {
+    const q = snapshot.questions.find((x) => x.id === questionIds[idx % questionIds.length])!;
+    return (q.timeLimitS ?? policy.timer.perQuestionS ?? 20) * 1000;
+  }
+
+  /** Royale: the zone shrinks each round (≥ 5 s); sudden death gets 5 s. */
+  function royaleLimit(idx: number): number {
+    if (mode !== "battle_royale") return baseLimit(idx);
+    if (idx >= questionIds.length) return 5000;
+    const shrink = Math.min(0.9, policy.royale.shrinkTimerPct / 100);
+    return Math.max(5000, Math.round(baseLimit(idx) * (1 - shrink) ** idx));
+  }
+
+  /** As resolve_royale_round (supabase/migrations/…_battle_royale.sql). */
+  function resolveRound(idx: number) {
+    const alive = active();
+    if (alive.length === 0) return;
+    const sudden = idx >= questionIds.length;
+    const right = (p: LocalPlayer) => {
+      const a = p.answers.get(idx);
+      return !!a && a.correct >= 1 && !a.shadow;
+    };
+    let hit = 0;
+    for (const p of alive) {
+      if (right(p)) continue;
+      hit++;
+      p.lives = sudden ? 0 : Math.max(0, (p.lives ?? policy.royale.lives) - 1);
+    }
+    if (hit === 0 && policy.royale.eliminateSlowest && alive.length > 1) {
+      const slowest = [...alive].sort(
+        (a, b) => (b.answers.get(idx)?.timeMs ?? 0) - (a.answers.get(idx)?.timeMs ?? 0),
+      )[0]!;
+      slowest.lives = Math.max(0, (slowest.lives ?? policy.royale.lives) - 1);
+    }
+    const out = alive.filter((p) => p.lives === 0);
+    if (out.length === alive.length) {
+      for (const p of out) p.lives = 1; // nobody goes when everyone would
+    } else {
+      for (const p of out) {
+        p.spectator = true;
+        p.eliminatedRound = idx;
+      }
+    }
+  }
+
   function advance(version: number, action: HostAction) {
     if (version !== s.version || s.phase === "ended") return;
     const now = Date.now();
@@ -334,13 +491,19 @@ export function createLocalLive(
     }
 
     const count = questionIds.length;
-    if (s.phase === "lobby" || (s.phase === "leaderboard" && s.round! + 1 < count)) {
+    const royale = mode === "battle_royale";
+    const alive = active().length;
+    const more = royale
+      ? alive > 1 &&
+        (s.round! + 1 < count || (policy.royale.suddenDeath && s.round! + 1 < count + 10))
+      : s.round! + 1 < count;
+    if (s.phase === "lobby" || (s.phase === "leaderboard" && more)) {
       const idx = s.phase === "lobby" ? 0 : s.round! + 1;
-      const q = snapshot.questions.find((x) => x.id === questionIds[idx])!;
-      const limitS = q.timeLimitS ?? policy.timer.perQuestionS ?? 20;
+      const q = snapshot.questions.find((x) => x.id === questionIds[idx % count])!;
+      if (royale && s.phase === "lobby") for (const p of active()) p.lives = policy.royale.lives;
       rounds[idx] = {
         questionId: q.id,
-        limitMs: limitS * 1000,
+        limitMs: royaleLimit(idx),
         openedAt: null,
         closesAt: null,
         winner: null,
@@ -354,8 +517,11 @@ export function createLocalLive(
       setPhase("open", r.limitMs);
       scheduleBots(r.questionId, r.limitMs);
     } else if (s.phase === "open") {
-      for (const p of players.values()) if (!p.answers.has(round!.questionId)) p.streak = 0;
+      for (const p of players.values()) if (!p.answers.has(s.round!)) p.streak = 0;
+      if (royale) resolveRound(s.round!);
       setPhase("reveal", REVEAL_MS);
+    } else if (s.phase === "reveal" && royale && alive <= 1) {
+      setPhase("podium", null);
     } else if (s.phase === "reveal") {
       setPhase("leaderboard", LEADERBOARD_MS);
     } else if (s.phase === "leaderboard") {
@@ -388,6 +554,9 @@ export function createLocalLive(
       spectator: late && policy.lateJoin === "spectator" && spectatorOk,
       joinedAt: Date.now(),
       wins: 0,
+      lives: null,
+      eliminatedRound: null,
+      shadowScore: 0,
       answers: new Map(),
     };
     players.set(p.id, p);
@@ -442,7 +611,7 @@ export function createLocalLive(
       const p = players.get(tokens.get(token) ?? "");
       if (!p) return { ok: false, error: "unauthorized" };
       if (p.kicked) return { ok: false, error: "kicked" };
-      if (p.spectator) return { ok: false, error: "spectator" };
+      if (p.spectator && mode !== "battle_royale") return { ok: false, error: "spectator" };
       const recorded = record(p, questionId, answer);
       return "error" in recorded ? { ok: false, error: recorded.error } : { ok: true, ...recorded };
     },

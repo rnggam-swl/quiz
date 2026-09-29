@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { playSound } from "@/lib/sound";
 
 import { Avatar } from "./Avatar";
+import { Hearts } from "./RoyaleStages";
 import { answerFor, choicesOf, isCorrectChoice, isMultiSelect, keysOf } from "./choices";
 import { useChannel, useLiveState, useNow, useServerOffset } from "./hooks";
 
@@ -157,7 +158,11 @@ function JoinForm({
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-4 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
         <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold tracking-wide text-accent-fg uppercase">
-          {mode === "battle_buzzer" ? "Rebutan" : "Live"}
+          {mode === "battle_buzzer"
+            ? "Rebutan"
+            : mode === "battle_royale"
+              ? "Battle Royale"
+              : "Live"}
         </span>
         <h1 className="text-2xl font-semibold text-balance">{title}</h1>
       </div>
@@ -343,6 +348,21 @@ function Game({
       <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-2">
         <Avatar id={you.id} className="size-8 text-base" />
         <span className="min-w-0 flex-1 truncate font-semibold">{you.nickname}</span>
+        {view.royale &&
+          (you.spectator ? (
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium">
+              Penonton · {you.shadowScore} bayangan
+            </span>
+          ) : (
+            // Remounts when a life goes, so the hearts shake (P7-12).
+            <span key={you.lives ?? "start"} className="animate-shake">
+              <Hearts
+                lives={you.lives ?? view.royale.startLives}
+                max={view.royale.startLives}
+                className="text-lg"
+              />
+            </span>
+          ))}
         <span className="font-semibold tabular-nums">{you.score} poin</span>
         {!connected && (
           <span className="text-xs text-warning" role="status">
@@ -364,11 +384,17 @@ function Game({
             <Avatar id={you.id} className="size-24 text-5xl" />
             <p className="text-2xl font-bold">Kamu masuk!</p>
             <p className="text-fg-muted">Lihat layar depan. Menunggu host memulai…</p>
+            {view.royale && (
+              <p className="flex items-center gap-2 text-fg-muted">
+                Battle royale: kamu punya{" "}
+                <Hearts lives={view.royale.startLives} max={view.royale.startLives} /> nyawa.
+              </p>
+            )}
           </Center>
         ) : view.phase === "countdown" ? (
           <Countdown view={view} offset={offset} />
         ) : view.phase === "open" && q ? (
-          you.spectator ? (
+          you.spectator && !view.royale ? (
             <Center>
               <p className="text-lg">Kamu bergabung saat permainan berjalan, jadi kamu menonton.</p>
             </Center>
@@ -386,6 +412,14 @@ function Game({
             </Center>
           ) : (
             <>
+              {view.royale && you.spectator && (
+                <p className="rounded-xl bg-surface-muted px-3 py-2 text-sm">
+                  {you.eliminatedRound === null
+                    ? "Permainan sudah berjalan saat kamu masuk, jadi kamu ikut sebagai penonton."
+                    : "Kamu sudah tersingkir."}{" "}
+                  Tetap jawab untuk <strong>poin bayangan</strong>.
+                </p>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-fg-muted">
                   Soal {(view.round ?? 0) + 1}/{view.questionCount}
@@ -415,9 +449,27 @@ function Game({
         ) : view.phase === "reveal" ? (
           view.mode === "battle_buzzer" ? (
             <BuzzerReveal view={view} />
+          ) : view.royale ? (
+            <RoyaleReveal view={view} />
           ) : (
             <RevealCard view={view} />
           )
+        ) : view.phase === "leaderboard" && view.royale ? (
+          <Center>
+            <p className="text-5xl font-bold tabular-nums">
+              {view.royale.remaining} / {view.royale.total}
+            </p>
+            <p className="text-lg text-fg-muted">masih bertahan</p>
+            {you.spectator ? (
+              <p className="font-medium">Kamu menonton · {you.shadowScore} poin bayangan</p>
+            ) : (
+              <Hearts
+                lives={you.lives ?? view.royale.startLives}
+                max={view.royale.startLives}
+                className="text-3xl"
+              />
+            )}
+          </Center>
         ) : view.phase === "leaderboard" ? (
           <Center>
             <Trophy className="size-12 text-warning" aria-hidden />
@@ -429,7 +481,22 @@ function Game({
           <Center>
             <p className="text-lg text-fg-muted">Peringkat akhir</p>
             <p className="text-6xl font-bold tabular-nums">#{you.rank ?? "…"}</p>
-            <p className="text-xl font-semibold tabular-nums">{you.score} poin</p>
+            {view.royale ? (
+              <p className="text-lg font-semibold">
+                {you.rank === 1
+                  ? "Kamu yang terakhir bertahan!"
+                  : you.eliminatedRound !== null
+                    ? `Bertahan sampai putaran ke-${you.eliminatedRound + 1}`
+                    : "Kamu menonton permainan ini"}
+                {you.shadowScore > 0 && (
+                  <span className="block text-sm font-normal text-fg-muted">
+                    {you.shadowScore} poin bayangan
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-xl font-semibold tabular-nums">{you.score} poin</p>
+            )}
             {you.rank !== null && you.rank <= 3 && (
               <p className="text-2xl">{["🥇", "🥈", "🥉"][you.rank - 1]}</p>
             )}
@@ -736,6 +803,69 @@ function BuzzerReveal({ view }: { view: PlayerView }) {
         Peringkat <strong className="text-fg tabular-nums">#{you.rank ?? "…"}</strong> · {you.score}{" "}
         poin
       </p>
+    </Center>
+  );
+}
+
+/** Royale: kept your lives, lost one, or out — the friendly way (P7-12, P7-13). */
+function RoyaleReveal({ view }: { view: PlayerView }) {
+  const { you, royale } = view;
+  const result = you.result;
+  const right = !!result && result.ratio >= 1;
+  const max = royale?.startLives ?? 3;
+  // The shared state names who went out, so this shows before the phone's own fetch.
+  const justOut =
+    royale?.eliminated.some((e) => e.id === you.id) ||
+    (you.eliminatedRound !== null && you.eliminatedRound === view.round);
+  if (justOut) {
+    return (
+      <Center>
+        <div className="flex w-full animate-pop flex-col items-center gap-3 rounded-3xl bg-surface-muted p-8">
+          <span className="text-5xl" aria-hidden>
+            🏅
+          </span>
+          <p className="text-2xl font-bold text-balance">
+            Kamu bertahan sampai putaran {(view.round ?? 0) + 1}!
+          </p>
+          <p className="text-fg-muted">
+            Tetap main sebagai penonton untuk poin bayangan. Peringkat kamu tetap tercatat.
+          </p>
+        </div>
+      </Center>
+    );
+  }
+  if (you.spectator) {
+    return (
+      <Center>
+        <p className="text-2xl font-bold">
+          {!result ? "Tidak menjawab" : right ? "Benar!" : "Belum tepat"}
+        </p>
+        {result && result.points !== null && result.points > 0 && (
+          <p className="font-semibold tabular-nums">+{result.points} poin bayangan</p>
+        )}
+        <p className="text-fg-muted">
+          {royale?.remaining ?? 0} peserta masih bertahan · kamu menonton
+        </p>
+      </Center>
+    );
+  }
+  return (
+    <Center>
+      <div
+        className={cn(
+          "flex w-full flex-col items-center gap-2 rounded-3xl p-8",
+          right ? "bg-success-soft text-success" : "bg-danger-soft text-danger",
+        )}
+      >
+        <p className="text-3xl font-bold">
+          {right ? "Benar! Nyawa aman" : !result ? "Waktu habis" : "Belum tepat"}
+        </p>
+        {!right && <p className="font-semibold">−1 nyawa</p>}
+        <span key={you.lives ?? "start"} className="animate-shake">
+          <Hearts lives={you.lives ?? max} max={max} className="text-3xl" />
+        </span>
+      </div>
+      <p className="text-fg-muted">{royale?.remaining ?? 0} peserta masih bertahan</p>
     </Center>
   );
 }

@@ -7,8 +7,8 @@ import { getDefinition } from "@/questions/registry";
 
 import type { GameMode } from "./types";
 
-/** Modes the "Mulai live" dialog can open (royale arrives in P7). */
-export const STARTABLE_MODES = ["live", "battle_buzzer"] as const;
+/** Modes the "Mulai live" dialog can open. */
+export const STARTABLE_MODES = ["live", "battle_buzzer", "battle_royale"] as const;
 
 /** The "Mulai live" options (P5-09, P6-06) and the session they become. */
 export const liveFormSchema = z.object({
@@ -21,6 +21,11 @@ export const liveFormSchema = z.object({
   lateJoin: z.enum(["allow", "spectator", "deny"]),
   /** Rebutan: points taken for a wrong answer. */
   wrongPenalty: z.number().int().min(0).max(10_000),
+  /** Battle royale. */
+  lives: z.number().int().min(1).max(10),
+  shrinkTimerPct: z.number().int().min(0).max(50),
+  eliminateSlowest: z.boolean(),
+  suddenDeath: z.boolean(),
 });
 export type LiveForm = z.infer<typeof liveFormSchema>;
 
@@ -32,6 +37,17 @@ export const DEFAULT_LIVE_FORM: LiveForm = {
   autoAdvance: false,
   lateJoin: "allow",
   wrongPenalty: 0,
+  lives: DEFAULT_POLICIES.battle_royale.royale.lives,
+  shrinkTimerPct: DEFAULT_POLICIES.battle_royale.royale.shrinkTimerPct,
+  eliminateSlowest: DEFAULT_POLICIES.battle_royale.royale.eliminateSlowest,
+  suddenDeath: DEFAULT_POLICIES.battle_royale.royale.suddenDeath,
+};
+
+/** The late-join default each mode starts with in the dialog. */
+export const DEFAULT_LATE_JOIN: Record<LiveForm["mode"], LiveForm["lateJoin"]> = {
+  live: "allow",
+  battle_buzzer: "allow",
+  battle_royale: "spectator",
 };
 
 export function livePolicyFrom(form: LiveForm): Policy {
@@ -44,6 +60,12 @@ export function livePolicyFrom(form: LiveForm): Policy {
     autoAdvance: form.autoAdvance,
     lateJoin: form.lateJoin,
     buzzer: { ...base.buzzer, wrongPenalty: form.wrongPenalty },
+    royale: {
+      lives: form.lives,
+      shrinkTimerPct: form.shrinkTimerPct,
+      eliminateSlowest: form.eliminateSlowest,
+      suddenDeath: form.suddenDeath,
+    },
   });
 }
 

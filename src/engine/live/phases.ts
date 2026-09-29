@@ -1,4 +1,4 @@
-import type { LivePhase } from "./types";
+import type { LivePhase, RoyaleInfo } from "./types";
 
 /**
  * What "Lanjut" does from each phase — the label on the host's button. The database
@@ -8,8 +8,16 @@ export function nextStepLabel(
   phase: LivePhase,
   round: number | null,
   questionCount: number,
+  royale?: Pick<RoyaleInfo, "remaining" | "suddenDeathEnabled"> | null,
 ): string {
   const last = round !== null && round + 1 >= questionCount;
+  if (royale && (phase === "reveal" || phase === "leaderboard") && royale.remaining <= 1) {
+    return "Podium";
+  }
+  if (royale && phase === "leaderboard" && last) {
+    // Out of questions with survivors left: sudden death (at most 10 extra rounds).
+    return royale.suddenDeathEnabled && round! + 1 < questionCount + 10 ? "Sudden death" : "Podium";
+  }
   switch (phase) {
     case "lobby":
       return "Mulai";

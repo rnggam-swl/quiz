@@ -29,6 +29,26 @@ export type Standing = {
   prevRank: number;
   /** Rebutan: questions won. */
   wins?: number;
+  /** Royale: lives left, and the round they went out in. */
+  lives?: number;
+  eliminatedRound?: number | null;
+};
+
+/** Battle royale state every screen shares. */
+export type RoyaleInfo = {
+  startLives: number;
+  /** Survivors, and everyone who played (late watchers not counted). */
+  remaining: number;
+  total: number;
+  suddenDeath: boolean;
+  /** Whether the session plays sudden death when the questions run out (policy). */
+  suddenDeathEnabled?: boolean;
+  /** This round has less time than its question normally gets. */
+  shrinking: boolean;
+  /** Knocked out in the current round. */
+  eliminated: Winner[];
+  /** Best shadow scores (podium and end). */
+  spectators: { id: string; nickname: string; score: number }[];
 };
 
 /** live_state() as the database returns it (supabase/migrations/…_live.sql). */
@@ -59,6 +79,7 @@ export type RawLiveState = {
   /** Rebutan: who won the current round. */
   winner: Winner | null;
   top: Standing[];
+  royale?: RoyaleInfo;
   you?: {
     id: string;
     nickname: string;
@@ -66,6 +87,9 @@ export type RawLiveState = {
     streak: number;
     kicked: boolean;
     spectator: boolean;
+    lives?: number | null;
+    eliminatedRound?: number | null;
+    shadowScore?: number;
     rank: number;
     answer: {
       answer: unknown;
@@ -113,6 +137,8 @@ export type LiveView = {
   reveal: LiveReveal | null;
   /** Rebutan: who won the current round (known from the lock on). */
   winner: Winner | null;
+  /** Battle royale. */
+  royale: RoyaleInfo | null;
   /** Leaderboard, podium and end. */
   top: Standing[];
   /** The server's clock when this was built (clock skew correction). */
@@ -128,6 +154,11 @@ export type YouView = {
   streak: number | null;
   kicked: boolean;
   spectator: boolean;
+  /** Royale: lives left (null before the start), the round they went out in. */
+  lives: number | null;
+  eliminatedRound: number | null;
+  /** Royale: points earned while watching. */
+  shadowScore: number;
   /** Whether they answered the current round, and what (their own answer only). */
   answered: boolean;
   answer: unknown;
@@ -141,7 +172,13 @@ export type PlayerView = LiveView & {
   partial?: boolean;
 };
 
-export type RosterEntry = { id: string; nickname: string };
+export type RosterEntry = {
+  id: string;
+  nickname: string;
+  /** Royale: the avatar grid shows who's still in. */
+  lives?: number | null;
+  eliminatedRound?: number | null;
+};
 
 export type HostView = LiveView & {
   code: string | null;

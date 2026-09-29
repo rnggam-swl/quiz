@@ -56,7 +56,26 @@ export async function hostViewFrom(
   snapshot: Snapshot,
 ): Promise<HostView> {
   let roster: HostView["roster"] = [];
-  if (raw.phase === "lobby") {
+  if (raw.mode === "battle_royale") {
+    // The projector's avatar grid: who's in, who's out (P7-09).
+    const { data: rows } = await supabase
+      .from("participants")
+      .select("id, nickname, lives, eliminated_round, is_spectator")
+      .eq("session_id", sessionId)
+      .is("kicked_at", null)
+      .order("joined_at")
+      .limit(500);
+    roster = (rows ?? [])
+      .filter((r) =>
+        raw.phase === "lobby" ? !r.is_spectator : !r.is_spectator || r.eliminated_round !== null,
+      )
+      .map((r) => ({
+        id: r.id,
+        nickname: r.nickname,
+        lives: r.lives,
+        eliminatedRound: r.eliminated_round,
+      }));
+  } else if (raw.phase === "lobby") {
     const { data: rows } = await supabase
       .from("participants")
       .select("id, nickname")
