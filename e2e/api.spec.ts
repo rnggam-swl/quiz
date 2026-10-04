@@ -27,7 +27,7 @@ test("a token reads the owner's quizzes and results until it is revoked", async 
   await page.goto("/account/integrations");
   await page.getByLabel("Nama token").fill("Moodle uji");
   await page.getByRole("button", { name: "Buat token" }).click();
-  const token = await page.getByLabel("Token API baru").inputValue();
+  const token = await page.getByRole("textbox", { name: "Token API baru" }).inputValue();
   expect(token).toMatch(/^qz_/);
   await page.getByRole("button", { name: "Selesai" }).click();
   await expect(page.getByText("Moodle uji")).toBeVisible();
@@ -65,7 +65,7 @@ test("a token reads the owner's quizzes and results until it is revoked", async 
 
   await page.getByRole("button", { name: "Cabut" }).click();
   await page.getByRole("button", { name: "Cabut “Moodle uji”?" }).click();
-  await expect(page.getByText("Dicabut")).toBeVisible();
+  await expect(page.getByText("Dicabut", { exact: true })).toBeVisible();
   const revoked = await page.request.get("/api/v1/quizzes", { headers });
   expect(revoked.status()).toBe(401);
 });

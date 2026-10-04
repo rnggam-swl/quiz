@@ -3,7 +3,7 @@
 import { BarChart3, Eye, EyeOff, KeyRound, LoaderCircle, Share2 } from "lucide-react";
 import Link from "next/link";
 import { Tabs } from "radix-ui";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { renderSVG } from "uqr";
 
 import { useEditor } from "@/components/editor/EditorContext";
@@ -396,10 +396,13 @@ function LibraryTab({
   onChange: (visibility: Visibility) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  // Shown at once; back to the saved value if saving fails.
+  const [shown, show] = useOptimistic(visibility);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   function choose(next: Visibility) {
     startTransition(async () => {
+      show(next);
       const result = await updateVisibilityAction(quizId, next);
       if (!result.ok) {
         toast.error(result.error);
@@ -431,7 +434,7 @@ function LibraryTab({
               type="radio"
               name="visibility"
               value={option.value}
-              checked={visibility === option.value}
+              checked={shown === option.value}
               onChange={() => choose(option.value)}
               className="mt-1 accent-accent"
             />
@@ -442,7 +445,7 @@ function LibraryTab({
           </label>
         ))}
       </fieldset>
-      {visibility !== "private" && (
+      {shown !== "private" && (
         <>
           <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
             Salinan berisi kunci jawaban. Jangan bagikan quiz yang dipakai untuk ujian.

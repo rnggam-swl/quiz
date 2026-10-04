@@ -59,6 +59,7 @@ test("change the password on /account, then sign in with the new one", async ({ 
   await expect(page.getByText("Password diganti.")).toBeVisible();
 
   await page.getByRole("button", { name: "Keluar" }).click();
+  await expect(page).toHaveURL(/\/login$/);
   await signIn(page, email, "rahasia-lama-123");
   await expect(page.getByText("Email atau password salah.")).toBeVisible();
   await signIn(page, email, "rahasia-baru-456");
@@ -69,6 +70,7 @@ test("forgot password: the emailed link lets you set a new one", async ({ page, 
   const email = `lupa-${Date.now()}@sekolah.test`;
   await signUp(page, email, "rahasia-lama-123");
   await page.getByRole("button", { name: "Keluar" }).click();
+  await expect(page).toHaveURL(/\/login$/);
 
   // Without the link, /reset-password refuses, even when signed in.
   await page.goto("/reset-password");
