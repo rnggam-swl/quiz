@@ -10,17 +10,32 @@ import { Button } from "@/components/ui/Button";
 import { uploadQuizMedia } from "@/lib/supabase/upload";
 
 import { publishQuizAction, saveQuizDraftAction } from "../../actions";
+import { generateQuestionsAction } from "../../ai-actions";
+import { questionTagsAction, searchQuestionBankAction } from "../../bank-actions";
 import { ShareButton } from "./ShareDialog";
 
 /** Wires the editor to Server Actions (save/publish) and Supabase Storage (uploads). */
-export function EditorPage({ initial, ownerId }: { initial: EditorInitialState; ownerId: string }) {
+export function EditorPage({
+  initial,
+  ownerId,
+  aiEnabled,
+}: {
+  initial: EditorInitialState;
+  ownerId: string;
+  aiEnabled: boolean;
+}) {
   const adapter = useMemo<EditorAdapter>(
     () => ({
       saveDraft: saveQuizDraftAction,
       publish: publishQuizAction,
       uploadMedia: (file, quizId) => uploadQuizMedia(file, ownerId, quizId),
+      questionBank: {
+        tags: questionTagsAction,
+        search: (query) => searchQuestionBankAction(query, initial.quiz.id),
+      },
+      ...(aiEnabled && { generateQuestions: generateQuestionsAction }),
     }),
-    [ownerId],
+    [ownerId, initial.quiz.id, aiEnabled],
   );
   return (
     <QuizEditor

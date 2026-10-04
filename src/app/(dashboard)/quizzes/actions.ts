@@ -11,6 +11,7 @@ import { createId } from "@/lib/id";
 import {
   checkDraft,
   makeSlug,
+  QUESTION_COLUMNS,
   saveDraftInputSchema,
   toDraftPayload,
   toEditorState,
@@ -21,8 +22,6 @@ import { validateQuiz } from "@/questions/question";
 
 const QUIZ_COLUMNS =
   "id, title, description, cover_url, theme, draft_revision, published_revision, latest_version, slug";
-const QUESTION_COLUMNS =
-  "id, type, prompt, help, media, config, time_limit_s, points, explanation, tags";
 
 /** Map the RPCs' raised exceptions (see the migration) to editor results. */
 function rpcError(message: string | undefined): "conflict" | "not_found" | "unknown" {

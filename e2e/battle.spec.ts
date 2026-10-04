@@ -80,6 +80,8 @@ test("rebutan: exactly one winner out of 50 simultaneous right answers, 20 times
   const { sessionId } = await openRebutan(page);
   // Leave the projector: its timers would move the session while the test drives it.
   await page.goto("/quizzes");
+  // This test is about the plain rule: the first right answer to arrive wins at once.
+  await setGrace(sessionId, 0);
 
   const players: string[] = [];
   for (let i = 0; i < 50; i += 10) {
@@ -142,4 +144,87 @@ test("rebutan: exactly one winner out of 50 simultaneous right answers, 20 times
     .select("round_id, battle_rounds!inner(session_id)", { count: "exact", head: true })
     .eq("battle_rounds.session_id", sessionId);
   expect(count).toBe(20);
+});
+
+/** Set policy.buzzer.graceMs on a session (P8-04). */
+async function setGrace(sessionId: string, graceMs: number) {
+  const admin = adminClient();
+  const { data } = await admin.from("sessions").select("policy").eq("id", sessionId).single();
+  const policy = (data!.policy ?? {}) as { buzzer?: Record<string, unknown> };
+  await admin
+    .from("sessions")
+    .update({ policy: { ...policy, buzzer: { ...policy.buzzer, graceMs } } })
+    .eq("id", sessionId);
+}
+
+test("rebutan with a grace window: 50 simultaneous right answers, one winner (P8-04)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const admin = adminClient();
+  const { sessionId } = await openRebutan(page);
+  await page.goto("/quizzes");
+  await setGrace(sessionId, 250);
+
+  const players: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    const { data } = await admin.rpc("join_live", {
+      p_session_id: sessionId,
+      p_nickname: `Bot ${i + 1}`,
+    });
+    players.push((data as { id: string }).id);
+  }
+  const { data: session } = await admin
+    .from("sessions")
+    .select("question_ids")
+    .eq("id", sessionId)
+    .single();
+  const questionId = (session!.question_ids as string[])[0]!;
+
+  for (let round = 0; round < 5; round++) {
+    const now = Date.now();
+    await admin.from("battle_rounds").insert({
+      session_id: sessionId,
+      idx: round,
+      question_id: questionId,
+      status: "open",
+      time_limit_ms: 60_000,
+      opened_at: new Date(now).toISOString(),
+      closes_at: new Date(now + 60_000).toISOString(),
+    });
+    await admin
+      .from("sessions")
+      .update({ phase: "open", current_round: round, status: "running" })
+      .eq("id", sessionId);
+
+    // Every phone says it reacted in 1–2 s; the server keeps each claim within bounds.
+    const outcomes = await Promise.all(
+      players.map((id, i) =>
+        admin
+          .rpc("record_battle_answer", {
+            p_participant_id: id,
+            p_question_id: questionId,
+            p_answer: { selectedIds: ["correct"] },
+            p_correct: true,
+            p_points: 1000,
+            p_client_ms: 1000 + i * 20,
+          })
+          .then(({ data }) => data as { accepted: boolean; pending?: boolean; won?: boolean }),
+      ),
+    );
+    expect(outcomes.some((o) => o.won)).toBe(false); // nobody wins on arrival
+    expect(outcomes.filter((o) => o.pending).length).toBeGreaterThan(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const { data: resolved } = await admin.rpc("resolve_buzzer_round", {
+      p_session_id: sessionId,
+    });
+    expect(resolved, `round ${round}`).toMatchObject({ status: "resolved" });
+  }
+
+  const { count } = await admin
+    .from("round_winners")
+    .select("round_id, battle_rounds!inner(session_id)", { count: "exact", head: true })
+    .eq("battle_rounds.session_id", sessionId);
+  expect(count).toBe(5);
 });

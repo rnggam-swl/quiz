@@ -40,6 +40,21 @@ Platform untuk membuat dan memainkan quiz yang **clean dan intuitif saat dibuat,
 5. Peserta bermain. Server menilai jawaban.
 6. Host melihat laporan per soal dan per peserta.
 
+## Library
+
+✅ P8-11. Guru bisa membagikan quiz yang sudah terbit ke guru lain lewat **Bagikan → Library** di editor.
+
+| Visibilitas (`quizzes.visibility`) | Siapa yang bisa melihat dan menyalin                                      |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| `private` (default)                | Hanya pemilik. Peserta tetap bisa bermain lewat link, kode, atau embed    |
+| `unlisted` ("Dengan link")         | Siapa pun yang punya link `/library/{id}`, tapi tidak muncul di pencarian |
+| `public` ("Publik di library")     | Muncul di `/library`, bisa dicari berdasarkan judul dan deskripsi         |
+
+- `/library` bisa dibuka tanpa login. Urutannya: paling banyak disalin, lalu terbaru. Halaman quiz menampilkan pertanyaan dan tipe soal (**tanpa kunci jawaban**), serta tombol **Coba mainkan** jika sesi latihan default quiz itu terbuka.
+- Library selalu memakai **versi terbit terakhir** (snapshot), bukan draf yang sedang diedit.
+- **Salin ke quiz saya** (butuh login) membuat draf pribadi baru dari snapshot itu, lengkap dengan kunci jawaban, ID soal baru, dan `copied_from` untuk menghitung "N× disalin". Media tetap menunjuk file aslinya (lihat [file yatim](03-data-model.md#konten)). Karena salinan berisi kunci jawaban, editor memperingatkan agar quiz untuk ujian tidak dibagikan.
+- RPC: `library_quizzes` dan `library_quiz` (anon + login, hanya kolom aman), `copy_library_quiz` (login). Tabel `quizzes`/`quiz_versions` tetap tertutup RLS.
+
 ## Di luar scope (untuk sekarang)
 
 - Proctoring dengan kamera atau mikrofon

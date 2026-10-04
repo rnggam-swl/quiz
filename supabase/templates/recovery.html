@@ -1,0 +1,12 @@
+<h2>Buat password baru</h2>
+
+<p>Seseorang (semoga kamu) meminta reset password untuk akun {{ .Email }}.</p>
+
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password"
+    >Buat password baru</a
+  >
+</p>
+
+<p>Link ini hanya bisa dipakai sekali. Jika kamu tidak meminta reset, abaikan email ini.</p>

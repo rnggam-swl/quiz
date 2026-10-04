@@ -27,6 +27,8 @@ import { questionDefinitions } from "@/questions/registry";
 import { questionUI } from "@/questions/ui";
 
 import { AddQuestionMenu } from "./AddQuestionMenu";
+import { AiGenerateButton } from "./AiGenerateDialog";
+import { QuestionBankButton } from "./QuestionBankDialog";
 import { useEditor, useEditorContext } from "./EditorContext";
 
 export function QuestionList() {
@@ -63,6 +65,8 @@ export function QuestionList() {
           <Plus /> Tambah soal
         </Button>
       </AddQuestionMenu>
+      <QuestionBankButton />
+      <AiGenerateButton />
 
       <div className="flex items-center justify-between px-1 text-xs font-medium text-fg-subtle">
         <span>{questions.length} soal</span>

@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+
 import {
   answeredState,
   gradeAnswer,
@@ -21,9 +23,11 @@ import {
 } from "@/engine/practice/server";
 import type { AnswerOutcome, AttemptSummary, AttemptView, Result } from "@/engine/practice/types";
 import { getParticipantTokenSecret } from "@/lib/env.server";
+import { sendLtiGrade } from "@/lib/lti/server";
 import { signParticipantToken } from "@/lib/participant-token";
 import { randomSeed } from "@/lib/seed-random";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchWebhooksAfterResponse } from "@/lib/webhooks/dispatch";
 import type { Json } from "@/lib/supabase/database.types";
 import type { ScoreResult } from "@/questions/types";
 
@@ -221,6 +225,9 @@ export async function finishAttemptAction(
     p_max_streak: draft.maxStreak,
   });
   if (error || !done) return { ok: false, error: rpcError(error?.message) };
+  dispatchWebhooksAfterResponse(); // attempt.submitted (P8-06)
+  // Learners from an LMS: the score goes to its gradebook (P8-08), unless results are held back.
+  if (ctx.policy.releaseResults === "immediately") after(() => sendLtiGrade(attempt.id));
 
   const canRetry =
     isSessionOpen(ctx) && (ctx.policy.attempts === 0 || done.attempt_no < ctx.policy.attempts);

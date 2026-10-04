@@ -49,4 +49,16 @@ describe("exam settings", () => {
   it("ignores the retired requireLogin flag", () => {
     expect(resolvePolicy("exam", { requireLogin: true, access: "roster" }).access).toBe("roster");
   });
+
+  it("keeps a rebutan stored before the grace window, adding its default (P8-04)", () => {
+    const policy = resolvePolicy("battle_buzzer", {
+      buzzer: { variant: "first_correct", holdS: 5, wrongPenalty: 100 },
+    });
+    expect(policy.buzzer).toEqual({
+      variant: "first_correct",
+      holdS: 5,
+      wrongPenalty: 100,
+      graceMs: 250,
+    });
+  });
 });

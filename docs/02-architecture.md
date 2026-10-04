@@ -138,6 +138,8 @@ Peserta (Player)                Next.js Server Action               Postgres (RP
 ## Identitas peserta
 
 - **Host** memakai Supabase Auth biasa (email atau Google).
+  - **Akun (P8-16):** `/account` untuk mengganti nama dan password. Password saat ini diverifikasi dengan client Supabase sekali pakai (sesi cookie tidak tersentuh). Akun Google tanpa password (`account_has_password()` membaca `auth.users`) bisa langsung membuat password.
+  - **Lupa password:** `/forgot-password` → `resetPasswordForEmail` (jawaban selalu sama, supaya tidak bisa dipakai mengecek email terdaftar) → link email → `/auth/callback?flow=recovery` (PKCE `code`, harus di browser yang sama) atau `/auth/confirm?token_hash=…&type=recovery` (bisa di perangkat lain, butuh template email [`supabase/templates/recovery.html`](../supabase/templates/recovery.html); di cloud: tempel di Authentication → Email Templates → Reset Password). Keduanya memasang cookie `pw_recovery` (HMAC, 15 menit, terikat user). Hanya sesi dengan cookie itu yang boleh membuat password baru di `/reset-password` tanpa password lama.
 - **Peserta** tidak punya akun. Saat bergabung, server membuat baris `participants` dan mengembalikan **participant token**, yaitu token bertanda tangan HMAC (`pt1.<payload>.<hmac>`, berlaku 30 hari, secret `PARTICIPANT_TOKEN_SECRET`). Klien menyimpannya di `localStorage` dan mengirimnya di setiap Server Action. Server Action memverifikasi token, lalu memakai client secret key untuk memanggil RPC khusus `service_role`.
   - _Kenapa bukan Supabase anonymous sign-in (rencana awal)?_ Sesi Supabase disimpan di cookie `SameSite=Lax`, yang tidak dikirim browser di dalam iframe lintas situs. Akibatnya Server Action tidak bisa mengenali peserta di mode embed. `localStorage` tetap berfungsi di iframe karena dipartisi per situs induk. Bonus: tidak ada akun `auth.users` sampah untuk setiap peserta.
   - Kode: [`src/lib/participant-token.ts`](../src/lib/participant-token.ts), [`src/app/play/actions.ts`](../src/app/play/actions.ts).
@@ -156,6 +158,25 @@ Satu channel per sesi: `session:{sessionId}`.
 - Channel-nya publik karena peserta tidak punya akun Supabase. Karena itu state bersama yang di-broadcast **ditandatangani server** (ECDSA P-256) dan diverifikasi HP sebelum dipakai; event tanpa tanda tangan yang sah hanya petunjuk untuk mengambil state lewat Server Action (RPC `live_state`). Klien yang baru terhubung atau reconnect selalu mengambil state lengkap. Detail: [09 · Realtime](09-mode-live.md#realtime-sessionid).
 - Timer mengikuti jam server: klien mengukur selisih jam lewat `GET /api/time` (median beberapa ping).
 - `src/engine/transport/` membungkus Supabase Realtime. Kalau nanti skala menuntut server game khusus (PartyKit, Durable Objects, Colyseus), cukup lapisan ini yang diganti.
+
+## API REST
+
+✅ P8-07. API **hanya baca** untuk mengambil hasil dari sistem lain (LMS, spreadsheet, dasbor sekolah). Belum ada konsep workspace, jadi satu akun host = satu workspace: token bisa membaca semua quiz milik akun pembuatnya.
+
+- **Token** dibuat di **Akun → Integrasi** (`/account/integrations`): `qz_` + 32 byte acak (base64url). Yang disimpan hanya SHA-256-nya (`api_tokens.token_hash`) dan 10 karakter awal (`prefix`) untuk ditampilkan. Token hanya ditampilkan sekali. Masa berlaku 30/90/365 hari atau tanpa batas, bisa dicabut kapan saja, maksimal 20 token aktif.
+- **Autentikasi:** `Authorization: Bearer qz_…`. Route meng-hash token lalu memanggil `api_authenticate(hash)` (`service_role`), yang mengembalikan pemilik token aktif dan mencatat `last_used_at` (paling sering sekali per menit).
+- **Otorisasi di database:** route tidak pernah membaca tabel langsung dengan secret key. Semua data diambil lewat `api_quizzes` / `api_quiz` / `api_attempts` / `api_attempt`, yang menerima `p_owner` dan menyaring sendiri berdasarkan `quizzes.owner_id`. Quiz milik orang lain → `null` → 404 (tidak dibedakan dari quiz yang tidak ada). Diuji di [`supabase/tests/api.test.ts`](../supabase/tests/api.test.ts).
+
+| Endpoint                            | Isi                                                                                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/quizzes`               | Semua quiz (maks. 1000): judul, slug, visibilitas, versi terakhir, jumlah soal                                                                                 |
+| `GET /api/v1/quizzes/{id}`          | Quiz + soal dari versi terakhir (id, tipe, pertanyaan, poin; **tanpa kunci jawaban**) + daftar sesi dan jumlah peserta                                         |
+| `GET /api/v1/quizzes/{id}/attempts` | Attempt, terlama dulu. Query: `session`, `status` (`in_progress`/`submitted`/`expired`), `since` (ISO, `started_at ≥`), `limit` (1–500, default 100), `cursor` |
+| `GET /api/v1/attempts/{id}`         | Satu attempt + jawaban per soal (jawaban, benar/total, poin, waktu, komentar guru)                                                                             |
+
+- Respons: `{ data }`, daftar attempt `{ data, next_cursor }` (ulangi dengan `cursor=next_cursor` sampai `null`; cursor = `(started_at, id)` baris terakhir, jadi tidak ada yang terlewat walaupun ada attempt baru). Error: `{ error: { code, message } }` dengan 400/401/404/500. `Cache-Control: no-store`.
+- Peserta dikenali lewat `participant.external_id` (dari embed token) atau `user_id` (ujian dengan login).
+- Belum ada rate limit per token (Vercel serverless tidak punya memori bersama). Jika dibutuhkan, tambahkan hitungan per menit di Postgres atau Upstash.
 
 ## Versi quiz
 

@@ -190,6 +190,44 @@ export function StartLiveButton({
           {form.mode === "battle_buzzer" && (
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="live-variant" className="font-normal">
+                  Cara menjawab
+                </Label>
+                <Select
+                  id="live-variant"
+                  className="w-44"
+                  value={form.buzzVariant}
+                  onChange={(e) => set({ buzzVariant: e.target.value as typeof form.buzzVariant })}
+                >
+                  <option value="first_correct">Tercepat benar</option>
+                  <option value="buzz_then_answer">Pencet lalu jawab</option>
+                </Select>
+              </div>
+              <p className="text-xs text-fg-subtle">
+                {form.buzzVariant === "buzz_then_answer"
+                  ? "Siapa yang pertama menekan BUZZ mendapat giliran menjawab. Salah atau waktunya habis: giliran dibuka lagi untuk yang lain."
+                  : "Semua menjawab langsung; jawaban benar pertama menang."}
+              </p>
+              {form.buzzVariant === "buzz_then_answer" && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <Label htmlFor="live-hold" className="font-normal">
+                    Waktu menjawab setelah BUZZ
+                  </Label>
+                  <Select
+                    id="live-hold"
+                    className="w-36"
+                    value={form.holdS}
+                    onChange={(e) => set({ holdS: Number(e.target.value) })}
+                  >
+                    {[3, 5, 10, 15].map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec} detik
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div className="mt-2 flex items-center justify-between gap-3">
                 <Label htmlFor="live-penalty" className="font-normal">
                   Penalti jawaban salah
                 </Label>
@@ -209,6 +247,29 @@ export function StartLiveButton({
               <p className="text-xs text-fg-subtle">
                 Satu kesempatan per soal. Skor tidak pernah turun di bawah 0.
               </p>
+              {form.buzzVariant === "first_correct" && (
+                <>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <Label htmlFor="live-grace" className="font-normal">
+                      Jeda toleransi
+                    </Label>
+                    <Select
+                      id="live-grace"
+                      className="w-36"
+                      value={form.graceMs}
+                      onChange={(e) => set({ graceMs: Number(e.target.value) })}
+                    >
+                      <option value={0}>Mati</option>
+                      <option value={250}>250 ms</option>
+                      <option value={500}>500 ms</option>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-fg-subtle">
+                    Jawaban benar yang masuk sesaat setelah yang pertama tetap diadu dengan waktu
+                    reaksi di HP, supaya sinyal lambat tidak langsung kalah.
+                  </p>
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-col gap-1">
@@ -259,6 +320,60 @@ export function StartLiveButton({
               <option value="spectator">Hanya menonton</option>
               <option value="deny">Tidak boleh masuk</option>
             </Select>
+          </div>
+          <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="live-teams" className="font-normal">
+                Mode tim
+              </Label>
+              <Switch
+                id="live-teams"
+                checked={form.teamsEnabled}
+                onCheckedChange={(checked) => set({ teamsEnabled: checked })}
+              />
+            </div>
+            {form.teamsEnabled && (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="live-team-count" className="font-normal">
+                    Jumlah tim
+                  </Label>
+                  <Select
+                    id="live-team-count"
+                    className="w-36"
+                    value={form.teamCount}
+                    onChange={(e) => set({ teamCount: Number(e.target.value) })}
+                  >
+                    {[2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>
+                        {n} tim
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="live-team-assign" className="font-normal">
+                    Pembagian
+                  </Label>
+                  <Select
+                    id="live-team-assign"
+                    className="w-44"
+                    value={form.teamAssign}
+                    onChange={(e) => set({ teamAssign: e.target.value as LiveForm["teamAssign"] })}
+                  >
+                    <option value="auto">Otomatis rata</option>
+                    <option value="choose">Peserta memilih</option>
+                  </Select>
+                </div>
+                <p className="text-xs text-fg-subtle">
+                  {form.mode === "live"
+                    ? "Skor tim = rata-rata skor anggota, jadi tim kecil tidak dirugikan."
+                    : form.mode === "battle_buzzer"
+                      ? "Satu anggota menjawab untuk timnya di setiap soal; poinnya masuk ke tim."
+                      : "Tim bertahan selama masih ada anggota yang punya nyawa."}
+                </p>
+              </>
+            )}
           </div>
         </div>
         <DialogFooter>

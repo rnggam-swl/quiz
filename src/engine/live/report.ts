@@ -26,6 +26,8 @@ export type LiveStandingRow = {
   avgTimeMs: number | null;
   /** Rebutan: questions won. */
   wins?: number;
+  /** Mode tim: the participant's team. */
+  team?: string;
   /** Royale: lives left, the round they went out in (null = survived), shadow points. */
   lives?: number;
   eliminatedRound?: number | null;

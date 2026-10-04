@@ -21,14 +21,14 @@ import { Dialog, DialogClose, DialogContent, DialogFooter } from "@/components/u
 import { Label } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { toast } from "@/components/ui/Toast";
-import { nextStepLabel, timedPhase } from "@/engine/live/phases";
+import { nextStepLabel, openOnTime, timedPhase } from "@/engine/live/phases";
 import type { HostAction, HostView, LiveHostAdapter, RosterEntry } from "@/engine/live/types";
 import { msUntil } from "@/engine/transport/clock";
 import type { ChannelFactory, PresenceMember } from "@/engine/transport/types";
 import { startLobbyMusic } from "@/lib/music";
 import { playSound } from "@/lib/sound";
 
-import { useChannel, useLiveState, useServerOffset } from "./hooks";
+import { useChannel, useLiveState, useNow, useServerOffset } from "./hooks";
 import {
   CountdownStage,
   LeaderboardStage,
@@ -38,6 +38,7 @@ import {
   RevealStage,
 } from "./HostStages";
 import { RoyaleBoard, RoyalePodium } from "./RoyaleStages";
+import { TeamBoard, TeamWinner } from "./Teams";
 
 /**
  * The host's projector screen (P5-10 – P5-14): the phases on a big screen and the
@@ -72,6 +73,9 @@ export function HostScreen({
     channel,
     pollMs: (v) => (!v ? null : v.phase === "open" ? 1000 : v.phase === "lobby" ? 4000 : 10_000),
   });
+  // The projector shows the question at the countdown's end by the server clock, like the
+  // phones (P8-03); the timers below still follow the server's own phase.
+  const now = useNow(100, view?.phase === "countdown" && !view.paused);
 
   // Presence: the host is on the channel too, and newcomers refresh the lobby.
   useEffect(() => {
@@ -115,14 +119,15 @@ export function HostScreen({
     return () => clearTimeout(timer);
   }, [view, offset, act]);
 
-  // Everyone answered: close the question early (P5-08).
+  // Everyone answered: close the question early (P5-08). Rebutan with teams: every team
+  // has had its one answer.
   useEffect(() => {
-    if (
-      view?.phase === "open" &&
-      !view.paused &&
-      view.players > 0 &&
-      view.answered >= view.players
-    ) {
+    const teamsWithMembers = view?.teams?.filter((t) => t.members > 0).length ?? 0;
+    const allIn =
+      view?.mode === "battle_buzzer" && teamsWithMembers > 0
+        ? view.teamsAnswered >= teamsWithMembers
+        : !!view && view.players > 0 && view.answered >= view.players;
+    if (view?.phase === "open" && !view.paused && allIn) {
       const timer = setTimeout(() => void act("next"), 600);
       return () => clearTimeout(timer);
     }
@@ -175,6 +180,12 @@ export function HostScreen({
     else toast.error("Gagal menyimpan.");
   }
 
+  async function shuffleTeams() {
+    const result = await adapter.shuffleTeams?.().catch(() => null);
+    if (result?.ok) setView(result.view);
+    else toast.error("Gagal mengacak tim.");
+  }
+
   async function doKick(entry: RosterEntry) {
     setKick(null);
     const result = await adapter.kick(entry.id).catch(() => null);
@@ -193,7 +204,8 @@ export function HostScreen({
   }
 
   const canPause = ["countdown", "open", "reveal", "leaderboard"].includes(view.phase);
-  const next = nextStepLabel(view.phase, view.round, view.questionCount, view.royale);
+  const shown = openOnTime(view, now + offset);
+  const next = nextStepLabel(shown.phase, view.round, view.questionCount, view.royale);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-fg">
@@ -228,11 +240,22 @@ export function HostScreen({
           </p>
         )}
         {view.phase === "lobby" && (
-          <LobbyStage view={view} joinUrl={joinUrl} online={online} onKick={setKick} />
+          <LobbyStage
+            view={view}
+            joinUrl={joinUrl}
+            online={online}
+            onKick={setKick}
+            onShuffleTeams={adapter.shuffleTeams ? () => void shuffleTeams() : undefined}
+          />
         )}
-        {view.phase === "countdown" && <CountdownStage view={view} offsetMs={offset} />}
-        {view.phase === "open" && <QuestionStage view={view} offsetMs={offset} />}
+        {shown.phase === "countdown" && <CountdownStage view={shown} offsetMs={offset} />}
+        {shown.phase === "open" && <QuestionStage view={shown} offsetMs={offset} />}
         {view.phase === "reveal" && <RevealStage view={view} />}
+        {view.phase === "leaderboard" && view.teams && (
+          <div className="mb-6">
+            <TeamBoard teams={view.teams} mode={view.mode} />
+          </div>
+        )}
         {view.phase === "leaderboard" && view.royale && <RoyaleBoard view={view} />}
         {view.phase === "leaderboard" && !view.royale && (
           <LeaderboardStage
@@ -240,6 +263,12 @@ export function HostScreen({
             top={view.top}
             showWins={view.mode === "battle_buzzer"}
           />
+        )}
+        {view.phase === "podium" && view.teams && (
+          <div className="mb-4 flex flex-col gap-4">
+            <TeamWinner teams={view.teams} />
+            <TeamBoard teams={view.teams} mode={view.mode} />
+          </div>
         )}
         {view.phase === "podium" &&
           (view.royale ? <RoyalePodium view={view} /> : <PodiumStage top={view.top} />)}

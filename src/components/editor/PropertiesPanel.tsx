@@ -2,7 +2,7 @@
 
 import { Check, CircleAlert, ImagePlus, LoaderCircle, Minus, X } from "lucide-react";
 import { Tabs } from "radix-ui";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogClose, DialogContent, DialogFooter } from "@/components/ui/Dialog";
@@ -232,7 +232,16 @@ function QuestionProperties() {
 }
 
 function TagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const { adapter } = useEditorContext();
   const [draft, setDraft] = useState("");
+  // One tag vocabulary across the host's quizzes (P8-12): suggest what's already in use.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    adapter.questionBank?.tags().then(
+      (uses) => setSuggestions(uses.map((u) => u.tag)),
+      () => setSuggestions([]),
+    );
+  }, [adapter]);
 
   function commit(raw: string) {
     const next = raw
@@ -247,7 +256,7 @@ function TagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string
     <Field
       label="Tag"
       htmlFor="prop-tags"
-      hint="Untuk bank soal di mode ujian. Pisahkan dengan koma."
+      hint="Untuk bank soal dan pool soal ujian. Pisahkan dengan koma."
     >
       {tags.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
@@ -271,6 +280,7 @@ function TagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string
       )}
       <Input
         id="prop-tags"
+        list="prop-tag-suggestions"
         value={draft}
         placeholder="mis. aljabar, kelas-8"
         disabled={tags.length >= 10}
@@ -286,6 +296,13 @@ function TagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string
         }}
         onBlur={() => draft && commit(draft)}
       />
+      <datalist id="prop-tag-suggestions">
+        {suggestions
+          .filter((s) => !tags.includes(s))
+          .map((s) => (
+            <option key={s} value={s} />
+          ))}
+      </datalist>
     </Field>
   );
 }

@@ -26,7 +26,7 @@ export async function loadPlayerView(
   sessionId: string,
   participantId: string,
 ): Promise<PlayerView | null> {
-  const { data } = await createAdminClient().rpc("live_state", {
+  const { data } = await createAdminClient().rpc("live_game_state", {
     p_session_id: sessionId,
     p_participant_id: participantId,
   });
@@ -41,7 +41,7 @@ export async function loadLiveRaw(
   supabase: HostClient,
   sessionId: string,
 ): Promise<{ raw: RawLiveState; snapshot: Snapshot } | null> {
-  const { data } = await supabase.rpc("live_state", { p_session_id: sessionId });
+  const { data } = await supabase.rpc("live_game_state", { p_session_id: sessionId });
   const raw = data as RawLiveState | null;
   if (!raw) return null;
   const snapshot = await loadSnapshot(raw.versionId);
@@ -140,7 +140,7 @@ export async function sessionInfo(sessionId: string): Promise<SessionInfo | null
 export async function loadServiceRaw(
   sessionId: string,
 ): Promise<{ raw: RawLiveState; snapshot: Snapshot } | null> {
-  const { data } = await createAdminClient().rpc("live_state", { p_session_id: sessionId });
+  const { data } = await createAdminClient().rpc("live_game_state", { p_session_id: sessionId });
   const raw = data as RawLiveState | null;
   if (!raw) return null;
   const snapshot = await loadSnapshot(raw.versionId);

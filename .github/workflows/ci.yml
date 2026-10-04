@@ -72,6 +72,8 @@ jobs:
       - run: pnpm test:e2e
         env:
           E2E_SUPABASE: "1"
+          # e2e/webhooks.spec.ts receives webhooks on localhost; never set this in production.
+          WEBHOOKS_ALLOW_LOCAL: "true"
 
       - uses: actions/upload-artifact@v4
         if: failure()

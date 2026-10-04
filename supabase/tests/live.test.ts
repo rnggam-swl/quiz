@@ -448,3 +448,80 @@ describe("live_state", () => {
     expect(you.kicked).toBe(true);
   });
 });
+
+describe("open_due_round (P8-03, buka serentak)", () => {
+  /** Lobby → countdown; returns the countdown's scheduled end. */
+  async function countdown(sessionId: string) {
+    const s = await asHost((tx) =>
+      one<Session>(tx, "select * from public.sessions where id = $1", [sessionId]),
+    );
+    return asHost((tx) => advance(tx, sessionId, s.state_version));
+  }
+  const open = (actor: Parameters<typeof as>[1], sessionId: string) =>
+    as(
+      db,
+      actor,
+      async (tx) =>
+        (await one<{ ok: boolean }>(tx, "select public.open_due_round($1) as ok", [sessionId])).ok,
+      { commit: true },
+    );
+
+  it("waits for the scheduled moment, then opens the round as of that moment", async () => {
+    const sessionId = await newSession();
+    const p = await asService((tx) => join(tx, sessionId, "Cepat"));
+    const cd = await countdown(sessionId);
+    expect(cd.phase).toBe("countdown");
+    expect(await open(service, sessionId)).toBe(false); // 3 s still to go
+
+    // The countdown ended 2 s ago, and nobody has opened the round yet.
+    const scheduled = new Date(Date.now() - 2000).toISOString();
+    await superuser("update public.sessions set phase_closes_at = $2 where id = $1", [
+      sessionId,
+      scheduled,
+    ]);
+    expect(await open(user(otherHost), sessionId)).toBe(false); // not their session
+    expect(await open(service, sessionId)).toBe(true);
+    expect(await open(service, sessionId)).toBe(false); // already open
+
+    const round = await asHost((tx) =>
+      one<{ status: string; opened_at: string; closes_at: string; time_limit_ms: number }>(
+        tx,
+        "select status, opened_at, closes_at, time_limit_ms from public.battle_rounds where session_id = $1",
+        [sessionId],
+      ),
+    );
+    expect(round.status).toBe("open");
+    expect(new Date(round.opened_at).toISOString()).toBe(scheduled);
+    expect(Date.parse(round.closes_at) - Date.parse(round.opened_at)).toBe(round.time_limit_ms);
+    const s = await asHost((tx) =>
+      one<Session>(tx, "select * from public.sessions where id = $1", [sessionId]),
+    );
+    expect(s.phase).toBe("open");
+    expect(s.state_version).toBe(cd.state_version + 1);
+
+    // The early answer counts its time from the scheduled open, like everyone else's.
+    const result = await asService(async (tx) =>
+      one<{ result: { timeMs: number } }>(
+        tx,
+        "select public.record_live_answer($1, $2, $3, 1, 1, 1000) as result",
+        [p.id, q1, JSON.stringify({ value: true })],
+      ),
+    );
+    expect(result.result.timeMs).toBeGreaterThanOrEqual(2000);
+  });
+
+  it("lets the host open their own session, and never a paused one", async () => {
+    const sessionId = await newSession();
+    const cd = await countdown(sessionId);
+    await superuser(
+      "update public.sessions set phase_closes_at = now() - interval '1 second', paused_at = now() where id = $1",
+      [sessionId],
+    );
+    expect(await open(user(host), sessionId)).toBe(false);
+    await superuser("update public.sessions set paused_at = null where id = $1", [sessionId]);
+    expect(await open(user(host), sessionId)).toBe(true);
+    // The host's own late "auto" is then a no-op: the version moved on.
+    const after = await asHost((tx) => advance(tx, sessionId, cd.state_version, "auto"));
+    expect(after.phase).toBe("open");
+  });
+});

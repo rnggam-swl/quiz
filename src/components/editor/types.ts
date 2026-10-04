@@ -1,5 +1,6 @@
 import type { QuizTheme } from "@/lib/theme";
 import type { Question, QuizIssue } from "@/questions/question";
+import type { QuestionType } from "@/questions/registry";
 import type { MediaRef } from "@/questions/shared";
 
 export type { QuizTheme };
@@ -37,6 +38,25 @@ export type EditorAdapter = {
   saveDraft: (input: SaveDraftInput) => Promise<SaveDraftResult>;
   publish: (input: { quizId: string; revision: number }) => Promise<PublishResult>;
   uploadMedia: (file: File, quizId: string) => Promise<MediaRef>;
+  /** The host's other quizzes as a question bank (P8-12). Hidden when absent. */
+  questionBank?: QuestionBank;
+  /** "Buat dengan AI" (P8-10): drafts from a topic, text or PDF. Hidden when absent. */
+  generateQuestions?: (form: FormData) => Promise<AiResult>;
+};
+
+export type AiResult =
+  | { ok: true; questions: Question[]; dropped: number; remaining: number }
+  | { ok: false; error: string };
+
+export type BankQuery = { text: string; tags: string[]; type: QuestionType | null; page: number };
+export type BankItem = { question: Question; quizTitle: string };
+export type BankPage = { items: BankItem[]; hasMore: boolean };
+export type TagUse = { tag: string; uses: number };
+
+export type QuestionBank = {
+  /** Every tag the host uses, most used first (suggestions in the tag field). */
+  tags: () => Promise<TagUse[]>;
+  search: (query: BankQuery) => Promise<BankPage>;
 };
 
 export type EditorInitialState = {

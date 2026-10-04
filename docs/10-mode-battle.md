@@ -11,7 +11,7 @@ Keduanya memakai infrastruktur mode Live ([09](09-mode-live.md)): dua layar, lob
 
 ```
 pending ─▶ countdown (3s) ─▶ open ─┬─▶ locked ─▶ revealed ─▶ (putaran berikut | podium)
-                                   └─▶ resolving (jeda toleransi, fase lanjutan) ─▶ locked
+                                   └─▶ resolving (jeda toleransi, rebutan) ─▶ locked
 ```
 
 | Kondisi `open → locked`            | Rebutan              | Battle Royale |
@@ -34,13 +34,21 @@ pending ─▶ countdown (3s) ─▶ open ─┬─▶ locked ─▶ revealed �
 - Jika tidak ada yang benar sampai waktu habis (atau semua sudah menjawab salah), jawaban benar ditampilkan dan tidak ada yang mendapat poin.
 - Streak rebutan = kemenangan beruntun; kemenangan orang lain memutusnya. Tidak ada bonus streak.
 
-### Varian B: Pencet lalu Jawab (gaya Cerdas Cermat, fase lanjutan)
+### Varian B: Pencet lalu Jawab (gaya Cerdas Cermat) ✅ P8-01
 
-1. Soal tampil dan tombol **BUZZ** aktif untuk semua.
-2. Buzz pertama yang diterima server mendapat `buzzer_holds` selama `holdS` detik (default 5). Peserta lain melihat "Andi sedang menjawab…".
-3. Jika benar: dapat poin, putaran terkunci.
-   Jika salah atau waktu hold habis: pemegang terkunci, hold dihapus, dan buzzer dibuka lagi untuk peserta lain.
-4. Cocok dipakai dengan proyektor dan **mode tim**: poin masuk ke tim, dan satu perwakilan per tim yang memencet buzzer.
+Dipilih di dialog "Mulai live" → **Cara menjawab: Pencet lalu jawab** (`policy.buzzer.variant = "buzz_then_answer"`), dengan **waktu menjawab setelah BUZZ** 3/5/10/15 detik (`holdS`, default 5).
+
+1. Soal tampil di proyektor dan HP. HP menampilkan tombol **BUZZ** besar, bukan pilihan jawaban.
+2. `buzz_in()` memberi putaran kepada BUZZ pertama yang diterima database (baris putaran dikunci `for update`, satu baris `buzzer_holds` per putaran) selama `holdS` detik. Proyektor menampilkan "🔔 Andi menjawab… 4", HP lain "Andi sedang menjawab…", dan HP pemegang menampilkan pilihan jawaban dengan hitung mundur "Buzzer milikmu!".
+3. Hanya pemegang yang boleh menjawab (`record_battle_answer` menolak dengan `not_holding`).
+   - **Benar:** menang seperti varian A (poin, putaran terkunci, reveal).
+   - **Salah:** penalti seperti biasa, terkunci untuk soal ini, hold dihapus, dan buzzer terbuka lagi untuk peserta lain.
+   - **Waktu hold habis:** dianggap salah (`expire_buzzer_hold`, termasuk penalti). Pencatatannya terjadi saat BUZZ berikutnya masuk, atau saat pemegang mencoba menjawab terlambat (`hold_expired`, toleransi jaringan 1 detik).
+4. Setiap perubahan hold menaikkan `state_version` dan di-broadcast sebagai `state` bertanda tangan yang membawa `hold` (`live_game_state()` = `live_state()` + hold). Tidak ada event terpisah.
+5. Jeda toleransi (P8-04) tidak berlaku di varian ini, karena giliran menjawab sudah eksklusif.
+6. Cocok dipakai dengan proyektor dan **mode tim**: poin masuk ke tim, dan satu perwakilan per tim yang memencet buzzer.
+
+Playground: `/playground/live?mode=pencet` (bot juga memencet lalu menjawab). Test: `supabase/tests/battle.test.ts` (pencet lalu jawab), `src/engine/live/live.test.ts`.
 
 ### Tipe soal
 
@@ -160,21 +168,22 @@ grant  execute on function record_battle_answer to service_role;
 - `reaction_ms` diambil dari jam database (`now() − opened_at`), tidak dari klien. Nilai ini dipakai di laporan (rata-rata waktu) dan nanti sebagai tie-breaker jeda toleransi.
 - Test: `supabase/tests/battle.test.ts` (aturan, penalti, izin) dan `e2e/battle.spec.ts` (50 jawaban benar serentak ke Postgres sungguhan, diulang 20 kali → tepat satu pemenang per putaran).
 
-### Keadilan latensi (fase lanjutan)
+### Keadilan latensi
 
 Versi pertama memakai urutan tiba di server. Setelah itu, tambahkan dua perbaikan:
 
-1. **Buka serentak:** payload soal dikirim saat `countdown`. Klien menyimpan soal dan baru menampilkannya pada `openedAt` (waktu server, disesuaikan dengan selisih jam yang diukur saat join). Semua peserta melihat soal di saat yang sama, walaupun sinyalnya berbeda.
-2. **Jeda toleransi (grace window):** jawaban benar pertama memindahkan putaran ke `resolving` selama `graceMs` (default 250ms). Semua jawaban benar dalam jeda itu dibandingkan berdasarkan `reaction_ms` yang sudah divalidasi, dan yang terkecil menang. Putaran menjadi `locked` setelah jeda berakhir.
+1. **Buka serentak ✅ P8-03:** soal sudah ikut di state `countdown`. Setiap layar menampilkannya tepat saat countdown habis menurut jam server (`openOnTime` di `src/engine/live/phases.ts`, memakai selisih jam dari `/api/time`), tanpa menunggu event `open`. Semua peserta melihat soal di saat yang sama, walaupun sinyalnya berbeda. Database mengikuti jam yang sama: `open_due_round()` membuka putaran dengan `opened_at` = akhir countdown yang dijadwalkan (bukan saat panggilan `auto` host tiba), sehingga poin kecepatan dan `reaction_ms` dihitung dari titik mulai yang sama. Fungsi ini dipanggil oleh action host sebelum `advance_live('auto')`, atau oleh action jawaban peserta jika jawaban datang saat putaran masih `countdown` (lalu jawaban dicoba sekali lagi). Detail: [09 · Buka serentak](09-mode-live.md#buka-serentak).
+2. **Jeda toleransi (grace window) ✅ P8-04:** jawaban benar pertama memindahkan putaran ke `resolving` selama `policy.buzzer.graceMs` (default 250 ms; pilihan Mati/250/500 ms di dialog "Mulai live"; 0 = aturan lama, yang pertama tiba langsung menang). Jawaban benar lain yang masuk dalam jeda itu ikut bersaing. Setelah jeda habis, `resolve_buzzer_round()` memilih `reaction_ms` terkecil (seri: yang tiba lebih dulu), lalu putaran terkunci dan sesi pindah ke reveal seperti biasa.
+   - **`reaction_ms` yang divalidasi:** HP mengukur waktu dari soal tampil sampai diketuk (`performance.now()`, dan berkat buka serentak semua HP mulai di waktu server yang sama), lalu mengirimnya bersama jawaban. Server hanya memercayainya dalam batas: `reaction = min(server, max(klaim_HP, server − 300 ms, 100 ms))`, dengan `server` = waktu tiba − `opened_at`. Sinyal lambat mendapat kompensasi sampai 300 ms, dan HP yang berbohong paling banyak juga hanya untung 300 ms. Klaim mentah disimpan di `battle_answers.client_ms` untuk audit.
+   - **Siapa yang menutup jeda:** Server Action jawaban yang masuk jeda menunggu sampai jeda habis, memanggil `resolve_buzzer_round` (hanya satu yang berhasil, sisanya mendapat `none`), lalu membaca pemenang, sehingga HP tetap menerima "Kamu tercepat!" atau "Keduluan" seperti sebelumnya. Action host juga menutup jeda (menunggu jika perlu) sebelum `next`/`auto`/`end`, supaya timer yang habis di tengah jeda tidak menutup putaran tanpa pemenang.
+   - Engine lokal (`/playground/live`) tetap memakai aturan tanpa jeda. Test: `supabase/tests/battle.test.ts` (jeda toleransi), `e2e/battle.spec.ts` (50 jawaban benar serentak dengan jeda → tepat satu pemenang).
 
 ## Event realtime tambahan
 
 Rebutan dan battle royale tidak butuh event baru (royale: `state` bertanda tangan membawa siapa yang tersingkir dan jumlah yang tersisa).
 Untuk rebutan: kemenangan memindahkan sesi ke `reveal`, dan Server Action pemenang mem-broadcast `state` bertanda tangan ([09 · Realtime](09-mode-live.md#realtime-sessionid)) yang membawa `winner`. Proyektor dan semua HP langsung tahu siapa yang tercepat.
 
-| Event       | Payload                                             |
-| ----------- | --------------------------------------------------- |
-| `buzz_hold` | `{ participantId, nickname, expiresAt }` (varian B) |
+Varian B juga tidak butuh event baru: `state` bertanda tangan membawa `hold: { id, nickname, expiresAt }` (rencana awal `buzz_hold`).
 
 ## UX
 
@@ -182,10 +191,32 @@ Untuk rebutan: kemenangan memindahkan sesi ke `reveal`, dan Server Action pemena
 - **Royale:** ❤️❤️🤍 di HUD. Proyektor menampilkan "12 / 40 tersisa" besar dan grid avatar, dengan avatar yang tersingkir menjadi abu-abu dan dicoret. Zona menyempit ditandai timer yang berubah warna.
 - Podium akhir: juara 1–3 + confetti. Untuk royale ditambah "Bertahan sampai putaran ke-N" per peserta.
 
-## Mode tim (fase lanjutan)
+## Mode tim ✅ P8-02
 
-- `policy.teams.enabled`: peserta memilih tim di lobby, atau dibagi otomatis secara merata.
-- Rebutan: poin masuk ke tim. Royale: nyawa dihitung per tim, dan tim tersingkir jika semua anggotanya tersingkir.
+Dinyalakan di dialog "Mulai live" (**Mode tim**, 2–5 tim), untuk live, rebutan, dan battle royale. `policy.teams = { enabled, count, assign }`.
+
+- **Tim** dibuat bersama sesi (trigger `sessions_create_teams`) dengan warna **dan** bentuk slot jawaban: Tim Merah ▲, Tim Biru ◆, Tim Kuning ●, Tim Hijau ■, Tim Ungu ★. Warna tidak pernah menjadi satu-satunya penanda.
+- **Pembagian:**
+  - **Otomatis rata** (default): peserta baru masuk ke tim dengan anggota paling sedikit (seri: slot terkecil) begitu bergabung.
+  - **Peserta memilih:** HP menampilkan tombol tim di lobby (`choose_team`).
+  - Peserta yang belum punya tim saat host menekan Mulai, atau yang masuk terlambat, dibagikan otomatis (`assign_teams(session, force)` sebelum `next`).
+  - Di lobby host bisa **Acak ulang tim** (`shuffle_teams`, merata dan acak).
+- **Skor tim** (`live_game_state().teams`):
+
+| Mode    | Skor tim                                             | Catatan                                                                                                                             |
+| ------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Live    | **Rata-rata** skor anggota                           | Tim yang lebih kecil tidak dirugikan. Selama countdown dan soal terbuka skor tim disembunyikan, supaya tidak membocorkan hasil      |
+| Rebutan | **Jumlah** skor anggota                              | **Satu perwakilan per tim per soal:** anggota pertama yang menjawab (atau BUZZ) mewakili timnya, yang lain mendapat `team_answered` |
+| Royale  | Anggota yang masih bertahan, lalu total nyawa mereka | Tim tersingkir jika semua anggotanya tersingkir                                                                                     |
+
+- **Layar:**
+  - Lobby proyektor mengelompokkan peserta per tim, plus "Belum memilih tim".
+  - Papan skor dan podium menampilkan papan tim (batang berwarna + bentuk), dengan banner "🏆 Tim Merah menang!".
+  - HP menampilkan chip tim di header dan "Tim Merah peringkat 2 dari 3" di papan skor dan podium.
+  - Laporan sesi punya **Klasemen tim**, dan nama tim di klasemen serta CSV.
+- **Rebutan bertim ditutup lebih cepat** saat setiap tim yang punya anggota sudah menjawab (`teamsAnswered`), bukan saat semua peserta menjawab.
+- HP tahu timnya setelah diacak ulang tanpa fetch: di lobby, state bertanda tangan membawa `memberIds` per tim (±7 KB untuk 200 peserta). Setelah lobby, daftar itu dibuang supaya broadcast tetap kecil.
+- Playground: `/playground/live?teams=1` (2 tim otomatis) atau `?teams=choose` (3 tim, pilih sendiri). Test: `supabase/tests/teams.test.ts`.
 
 ## Implementasi Rebutan (P6)
 

@@ -1,5 +1,40 @@
 import type { LivePhase, RoyaleInfo } from "./types";
 
+type Timed = {
+  phase: LivePhase;
+  phaseClosesAt: string | null;
+  timeLimitMs: number | null;
+  paused: boolean;
+  question: unknown;
+  answered: number;
+};
+
+/**
+ * Buka serentak (P8-03, docs/09): the question already came with the countdown, so every
+ * screen shows it when the countdown ends by the server clock (`serverNow` = Date.now() +
+ * offset), not when the "open" event happens to arrive. Until that event, the view is the
+ * countdown's with the phase moved on and the question's own deadline.
+ */
+export function openOnTime<V extends Timed>(view: V, serverNow: number): V {
+  if (
+    view.phase !== "countdown" ||
+    view.paused ||
+    !view.phaseClosesAt ||
+    !view.question ||
+    view.timeLimitMs === null
+  ) {
+    return view;
+  }
+  const opensAt = Date.parse(view.phaseClosesAt);
+  if (serverNow < opensAt) return view;
+  return {
+    ...view,
+    phase: "open",
+    phaseClosesAt: new Date(opensAt + view.timeLimitMs).toISOString(),
+    answered: 0,
+  };
+}
+
 /**
  * What "Lanjut" does from each phase — the label on the host's button. The database
  * (advance_live) decides the real transition; this only names it.

@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { resolvePolicy, type Policy } from "@/engine/policy";
@@ -24,7 +25,10 @@ export type ShareState = {
   slug: string | null;
   embedOrigins: string[];
   hasEmbedSecret: boolean;
+  visibility: Visibility;
 };
+
+export type Visibility = "private" | "unlisted" | "public";
 
 type ShareResult<T> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -62,7 +66,11 @@ export async function getShareStateAction(
   }
 
   const [{ data: quiz }, { count }] = await Promise.all([
-    supabase.from("quizzes").select("slug, embed_allowed_origins").eq("id", id).single(),
+    supabase
+      .from("quizzes")
+      .select("slug, embed_allowed_origins, visibility")
+      .eq("id", id)
+      .single(),
     supabase
       .from("quiz_embed_secrets")
       .select("quiz_id", { count: "exact", head: true })
@@ -78,8 +86,25 @@ export async function getShareStateAction(
       slug: quiz?.slug ?? null,
       embedOrigins: quiz?.embed_allowed_origins ?? [],
       hasEmbedSecret: (count ?? 0) > 0,
+      visibility: quiz?.visibility ?? "private",
     },
   };
+}
+
+/** Library (P8-11): private, unlisted (anyone with the link) or public (listed). */
+export async function updateVisibilityAction(
+  quizId: string,
+  visibility: Visibility,
+): Promise<ShareResult<{ visibility: Visibility }>> {
+  const id = z.uuid().parse(quizId);
+  const parsed = z.enum(["private", "unlisted", "public"]).safeParse(visibility);
+  if (!parsed.success) return { ok: false, error: "Pilihan tidak valid." };
+  await requireHost();
+  const supabase = await createClient();
+  const { error } = await supabase.from("quizzes").update({ visibility: parsed.data }).eq("id", id);
+  if (error) return { ok: false, error: "Gagal menyimpan." };
+  revalidatePath("/library");
+  return { ok: true, visibility: parsed.data };
 }
 
 export async function updatePracticeSettingsAction(

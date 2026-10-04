@@ -26,7 +26,7 @@ test("royale: a wrong answer with the last life eliminates, the survivor wins", 
   await page.goto(`/quizzes/${quizId}/live`);
   await page.getByRole("button", { name: "Mulai live" }).click();
   await page.getByText("Battle Royale", { exact: true }).click();
-  await page.getByLabel("Nyawa").selectOption("1");
+  await page.getByLabel("Nyawa", { exact: true }).selectOption("1");
   await page.getByRole("button", { name: "Buka lobby" }).click();
   await expect(page).toHaveURL(/\/host\/[0-9a-f-]+$/);
   const label = await page.getByLabel(/^Kode \d{6}$/).getAttribute("aria-label");

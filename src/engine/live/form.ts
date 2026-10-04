@@ -19,13 +19,23 @@ export const liveFormSchema = z.object({
   shuffleOptions: z.boolean(),
   autoAdvance: z.boolean(),
   lateJoin: z.enum(["allow", "spectator", "deny"]),
+  /** Rebutan: first right answer wins, or press BUZZ then answer (P8-01). */
+  buzzVariant: z.enum(["first_correct", "buzz_then_answer"]),
+  /** Rebutan "Pencet lalu Jawab": seconds the buzzer holds the round. */
+  holdS: z.number().int().min(1).max(30),
   /** Rebutan: points taken for a wrong answer. */
   wrongPenalty: z.number().int().min(0).max(10_000),
+  /** Rebutan: the grace window (P8-04). */
+  graceMs: z.number().int().min(0).max(1000),
   /** Battle royale. */
   lives: z.number().int().min(1).max(10),
   shrinkTimerPct: z.number().int().min(0).max(50),
   eliminateSlowest: z.boolean(),
   suddenDeath: z.boolean(),
+  /** Mode tim (P8-02). */
+  teamsEnabled: z.boolean(),
+  teamCount: z.number().int().min(2).max(5),
+  teamAssign: z.enum(["auto", "choose"]),
 });
 export type LiveForm = z.infer<typeof liveFormSchema>;
 
@@ -36,11 +46,17 @@ export const DEFAULT_LIVE_FORM: LiveForm = {
   shuffleOptions: false,
   autoAdvance: false,
   lateJoin: "allow",
+  buzzVariant: "first_correct",
+  holdS: DEFAULT_POLICIES.battle_buzzer.buzzer.holdS,
   wrongPenalty: 0,
+  graceMs: DEFAULT_POLICIES.battle_buzzer.buzzer.graceMs,
   lives: DEFAULT_POLICIES.battle_royale.royale.lives,
   shrinkTimerPct: DEFAULT_POLICIES.battle_royale.royale.shrinkTimerPct,
   eliminateSlowest: DEFAULT_POLICIES.battle_royale.royale.eliminateSlowest,
   suddenDeath: DEFAULT_POLICIES.battle_royale.royale.suddenDeath,
+  teamsEnabled: false,
+  teamCount: 2,
+  teamAssign: "auto",
 };
 
 /** The late-join default each mode starts with in the dialog. */
@@ -59,13 +75,19 @@ export function livePolicyFrom(form: LiveForm): Policy {
     shuffleOptions: form.shuffleOptions,
     autoAdvance: form.autoAdvance,
     lateJoin: form.lateJoin,
-    buzzer: { ...base.buzzer, wrongPenalty: form.wrongPenalty },
+    buzzer: {
+      variant: form.buzzVariant,
+      holdS: form.holdS,
+      wrongPenalty: form.wrongPenalty,
+      graceMs: form.graceMs,
+    },
     royale: {
       lives: form.lives,
       shrinkTimerPct: form.shrinkTimerPct,
       eliminateSlowest: form.eliminateSlowest,
       suddenDeath: form.suddenDeath,
     },
+    teams: { enabled: form.teamsEnabled, count: form.teamCount, assign: form.teamAssign },
   });
 }
 

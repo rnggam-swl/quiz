@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { HostHeader } from "@/components/host/HostHeader";
+import { TeamChip } from "@/components/live/Teams";
 import { Button } from "@/components/ui/Button";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -19,7 +20,7 @@ export default async function LiveReportPage({
   params,
 }: PageProps<"/quizzes/[id]/live/[sessionId]">) {
   const { id, sessionId } = await params;
-  const { user, session, title, battle, royale, standings, replay, items, questionCount } =
+  const { user, session, title, battle, royale, teams, standings, replay, items, questionCount } =
     await buildLiveReport(id, sessionId);
   const headers = royale
     ? ["#", "Peserta", "Bertahan", "Nyawa", "Skor", "Benar", "Ketepatan", "Poin bayangan"]
@@ -67,6 +68,32 @@ export default async function LiveReportPage({
           <Stat label="Skor tertinggi" value={standings[0]?.score ?? "–"} />
         </dl>
 
+        {teams && (
+          <section className="flex flex-col gap-3" aria-labelledby="teams-title">
+            <h2 id="teams-title" className="text-lg font-semibold">
+              Klasemen tim
+            </h2>
+            <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {teams.map((team) => (
+                <li
+                  key={team.id}
+                  className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card"
+                >
+                  <span className="text-2xl font-bold tabular-nums">#{team.rank}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <TeamChip team={team} className="self-start" />
+                    <span className="text-xs text-fg-muted">
+                      {royale
+                        ? `${team.alive}/${team.members} bertahan · ${team.score} nyawa`
+                        : `${team.score} poin${session.mode === "live" ? " rata-rata" : ""} · ${team.members} anggota`}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         <section className="flex flex-col gap-3" aria-labelledby="standings-title">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id="standings-title" className="text-lg font-semibold">
@@ -98,7 +125,12 @@ export default async function LiveReportPage({
                   {standings.map((r) => (
                     <tr key={r.id}>
                       <td className="px-4 py-3 font-semibold tabular-nums">{r.rank}</td>
-                      <td className="px-4 py-3 font-medium">{r.nickname}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {r.nickname}
+                        {r.team && (
+                          <span className="block text-xs font-normal text-fg-subtle">{r.team}</span>
+                        )}
+                      </td>
                       {royale && (
                         <>
                           <td className="px-4 py-3">

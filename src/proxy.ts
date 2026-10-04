@@ -6,7 +6,7 @@ import { embedOriginsForSlug } from "@/lib/supabase/embed-lookup";
 import { updateSession } from "@/lib/supabase/proxy";
 
 /** Routes for signed-in hosts. The real check is in the DAL (src/lib/auth.ts); this is the fast path. */
-const HOST_ROUTES = ["/quizzes", "/host"];
+const HOST_ROUTES = ["/quizzes", "/host", "/account"];
 
 /** Headers every page gets. Embed pages override frame-ancestors per quiz. */
 function secure(response: NextResponse, csp = "frame-ancestors 'self'"): NextResponse {
@@ -23,6 +23,12 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/embed/")) {
     const slug = pathname.split("/")[2] ?? "";
     return secure(NextResponse.next({ request }), frameAncestors(await embedOriginsForSlug(slug)));
+  }
+
+  // LTI (P8-08): framed by whichever LMS the teacher registered; the launch itself was
+  // verified by /api/lti/launch, so no session cookies here either.
+  if (pathname.startsWith("/lti/")) {
+    return secure(NextResponse.next({ request }), "frame-ancestors *");
   }
 
   let env: PublicEnv;
@@ -47,8 +53,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static files, images and the clock-sync ping (needs no session).
+  // Everything except static files, images, and the public APIs that need no session: the
+  // clock-sync ping, oEmbed, the token-authenticated REST API, the scheduled jobs and the LTI
+  // endpoints the LMS calls.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|api/webhooks|api/maintenance|api/lti|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

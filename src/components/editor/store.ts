@@ -26,6 +26,8 @@ export type EditorState = EditorInitialState & {
 
   setQuiz: (patch: Partial<Omit<QuizDraft, "id">>) => void;
   addQuestion: (type: QuestionType, afterId?: string | null) => string;
+  /** Add imported questions at the end (P8-13). */
+  appendQuestions: (questions: Question[]) => void;
   updateQuestion: (id: string, patch: QuestionPatch) => void;
   updateConfig: (id: string, config: unknown) => void;
   changeType: (id: string, type: QuestionType) => void;
@@ -80,6 +82,11 @@ export function createEditorStore(initial: EditorInitialState) {
           return { questions, selectedId: question.id };
         });
         return question.id;
+      },
+
+      appendQuestions: (added) => {
+        if (added.length === 0) return;
+        edit((s) => ({ questions: [...s.questions, ...added], selectedId: added[0]!.id }));
       },
 
       updateQuestion: (id, patch) => mapQuestion(id, (q) => ({ ...q, ...patch })),

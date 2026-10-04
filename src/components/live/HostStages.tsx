@@ -16,6 +16,7 @@ import { Avatar } from "./Avatar";
 import { choicesOf, isCorrectChoice } from "./choices";
 import { CircleTimer } from "./CircleTimer";
 import { Eliminated, RoyaleCounter } from "./RoyaleStages";
+import { TeamRoster } from "./Teams";
 import { useNow } from "./hooks";
 
 // The projector's big screens, one per phase (docs/09-mode-live.md, P5-10 – P5-13).
@@ -27,12 +28,15 @@ export function LobbyStage({
   joinUrl,
   online,
   onKick,
+  onShuffleTeams,
 }: {
   view: HostView;
   joinUrl: string;
   /** Presence keys currently connected. */
   online: ReadonlySet<string>;
   onKick: (entry: RosterEntry) => void;
+  /** Mode tim: deal everyone out again. */
+  onShuffleTeams?: () => void;
 }) {
   const qrUrl = `${joinUrl}?code=${view.code ?? ""}`;
   const qr = useMemo(() => renderSVG(qrUrl, { border: 1 }), [qrUrl]);
@@ -71,29 +75,53 @@ export function LobbyStage({
           <p className="flex flex-1 items-center justify-center rounded-3xl border-2 border-dashed border-line-strong p-10 text-xl text-fg-muted">
             Menunggu peserta bergabung…
           </p>
+        ) : view.teams ? (
+          <TeamRoster
+            teams={view.teams}
+            roster={view.roster}
+            onShuffle={onShuffleTeams}
+            renderMember={(id) => {
+              const p = view.roster.find((r) => r.id === id);
+              return p ? <Member p={p} online={online.has(p.id)} onKick={onKick} /> : null;
+            }}
+          />
         ) : (
           <ul className="flex flex-wrap content-start gap-3">
             {view.roster.map((p) => (
               <li key={p.id} className="animate-pop">
-                <button
-                  type="button"
-                  onClick={() => onKick(p)}
-                  title="Klik untuk mengeluarkan"
-                  className={cn(
-                    "flex items-center gap-2 rounded-full bg-surface py-1.5 pr-4 pl-1.5 text-lg font-semibold shadow-card transition-colors hover:bg-danger-soft",
-                    !online.has(p.id) && "opacity-50",
-                  )}
-                >
-                  <Avatar id={p.id} />
-                  <span className="max-w-48 truncate">{p.nickname}</span>
-                  <span className="sr-only">{online.has(p.id) ? "(online)" : "(offline)"}</span>
-                </button>
+                <Member p={p} online={online.has(p.id)} onKick={onKick} />
               </li>
             ))}
           </ul>
         )}
       </section>
     </div>
+  );
+}
+
+function Member({
+  p,
+  online,
+  onKick,
+}: {
+  p: RosterEntry;
+  online: boolean;
+  onKick: (entry: RosterEntry) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onKick(p)}
+      title="Klik untuk mengeluarkan"
+      className={cn(
+        "flex items-center gap-2 rounded-full bg-surface py-1.5 pr-4 pl-1.5 text-lg font-semibold shadow-card transition-colors hover:bg-danger-soft",
+        !online && "opacity-50",
+      )}
+    >
+      <Avatar id={p.id} />
+      <span className="max-w-48 truncate">{p.nickname}</span>
+      <span className="sr-only">{online ? "(online)" : "(offline)"}</span>
+    </button>
   );
 }
 
@@ -196,12 +224,35 @@ function Prompt({ view }: { view: HostView }) {
   );
 }
 
+/** Rebutan "Pencet lalu Jawab" (P8-01): who holds the buzzer, with their seconds left. */
+function HoldBanner({ view, offsetMs }: { view: HostView; offsetMs: number }) {
+  const now = useNow(250);
+  const left = view.hold ? (msUntil(view.hold.expiresAt, offsetMs, now) ?? 0) : 0;
+  if (view.buzzVariant !== "buzz_then_answer") return null;
+  return (
+    <p
+      className={cn(
+        "self-center rounded-full px-6 py-2 text-2xl font-bold",
+        view.hold && left > 0
+          ? "animate-pop bg-warning-soft text-warning"
+          : "bg-surface text-fg-muted shadow-card",
+      )}
+      aria-live="polite"
+    >
+      {view.hold && left > 0
+        ? `🔔 ${view.hold.nickname} menjawab… ${Math.ceil(left / 1000)}`
+        : "Tekan BUZZ di HP untuk menjawab"}
+    </p>
+  );
+}
+
 export function QuestionStage({ view, offsetMs }: { view: HostView; offsetMs: number }) {
   const q = view.question;
   if (!q) return null;
   const choices = choicesOf(q);
   return (
     <div className="flex flex-1 flex-col gap-6">
+      <HoldBanner view={view} offsetMs={offsetMs} />
       <div className="flex items-start justify-between gap-6">
         <CircleTimer
           closesAt={view.phaseClosesAt}

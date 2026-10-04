@@ -18,6 +18,28 @@ export type GameMode = (typeof GAME_MODES)[number];
 
 export type Winner = { id: string; nickname: string };
 
+/** Rebutan "Pencet lalu Jawab" (P8-01): who holds the buzzer, until when. */
+export type BuzzerHold = { id: string; nickname: string; expiresAt: string };
+
+/** Team names by slot, as the database names them (…_teams.sql). */
+export const TEAM_NAMES = ["Tim Merah", "Tim Biru", "Tim Kuning", "Tim Hijau", "Tim Ungu"] as const;
+
+/** Mode tim (P8-02): a team, drawn with answer slot `slot`'s colour and shape. */
+export type TeamRef = { id: string; slot: 1 | 2 | 3 | 4 | 5; name: string };
+
+/**
+ * A team on the board. Score: live = members' average, rebutan = sum, royale = lives of
+ * the members still in (ranked by `alive` first).
+ */
+export type TeamStanding = TeamRef & {
+  members: number;
+  alive: number;
+  score: number;
+  rank: number;
+  /** Participant ids, in the lobby only (phones find their team after a shuffle). */
+  memberIds?: string[];
+};
+
 export type Standing = {
   id: string;
   nickname: string;
@@ -78,6 +100,11 @@ export type RawLiveState = {
   answered: number;
   /** Rebutan: who won the current round. */
   winner: Winner | null;
+  /** Rebutan "Pencet lalu Jawab" (live_game_state). */
+  hold?: BuzzerHold | null;
+  /** Mode tim (live_game_state): the teams, and how many answered this rebutan round. */
+  teams?: TeamStanding[];
+  teamsAnswered?: number;
   top: Standing[];
   royale?: RoyaleInfo;
   you?: {
@@ -90,6 +117,7 @@ export type RawLiveState = {
     lives?: number | null;
     eliminatedRound?: number | null;
     shadowScore?: number;
+    team?: TeamRef | null;
     rank: number;
     answer: {
       answer: unknown;
@@ -137,6 +165,14 @@ export type LiveView = {
   reveal: LiveReveal | null;
   /** Rebutan: who won the current round (known from the lock on). */
   winner: Winner | null;
+  /** Rebutan: the variant (null in other modes), and who holds the buzzer while open. */
+  buzzVariant: "first_correct" | "buzz_then_answer" | null;
+  hold: BuzzerHold | null;
+  /** Mode tim: the team board (null without teams), and rebutan teams that answered. */
+  teams: TeamStanding[] | null;
+  teamsAnswered: number;
+  /** Mode tim: "choose" lets phones pick a team in the lobby. */
+  teamChoice: boolean;
   /** Battle royale. */
   royale: RoyaleInfo | null;
   /** Leaderboard, podium and end. */
@@ -159,6 +195,8 @@ export type YouView = {
   eliminatedRound: number | null;
   /** Royale: points earned while watching. */
   shadowScore: number;
+  /** Mode tim: this phone's team (null before being placed). */
+  team: TeamRef | null;
   /** Whether they answered the current round, and what (their own answer only). */
   answered: boolean;
   answer: unknown;
@@ -178,6 +216,8 @@ export type RosterEntry = {
   /** Royale: the avatar grid shows who's still in. */
   lives?: number | null;
   eliminatedRound?: number | null;
+  /** Mode tim: the lobby groups the roster by team. */
+  teamId?: string | null;
 };
 
 export type HostView = LiveView & {
@@ -206,7 +246,13 @@ export type LivePlayerAdapter = {
     token: string,
     questionId: string,
     answer: unknown,
+    /** Milliseconds from showing the question to the tap, as this phone measured it (P8-04). */
+    clientMs?: number,
   ) => Promise<Result<{ outcome?: BattleOutcome }>>;
+  /** Rebutan "Pencet lalu Jawab": take the buzzer (P8-01). */
+  buzz?: (token: string, questionId: string) => Promise<Result<{ expiresAt: string }>>;
+  /** Mode tim "pilih sendiri": pick a team in the lobby (P8-02). */
+  chooseTeam?: (token: string, teamId: string) => Promise<Result<object>>;
 };
 
 /** The projector's controls. */
@@ -218,4 +264,6 @@ export type LiveHostAdapter = {
     autoAdvance?: boolean;
   }) => Promise<Result<{ view: HostView }>>;
   kick: (participantId: string) => Promise<Result<{ view: HostView }>>;
+  /** Mode tim: deal everyone out again, in the lobby (P8-02). */
+  shuffleTeams?: () => Promise<Result<{ view: HostView }>>;
 };
