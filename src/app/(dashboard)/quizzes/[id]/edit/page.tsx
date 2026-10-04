@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { requireHost } from "@/lib/auth";
+import { getAnthropicKey } from "@/lib/env.server";
 import { toEditorState } from "@/lib/quiz-data";
 import { createClient } from "@/lib/supabase/server";
 
 import { EditorPage } from "./EditorPage";
 
 export const metadata: Metadata = { title: "Editor" };
+
+// "Buat dengan AI" runs as a Server Action of this page and can take a minute or two.
+export const maxDuration = 180;
 
 export default async function EditQuizPage({ params }: PageProps<"/quizzes/[id]/edit">) {
   const { id } = await params;
@@ -33,5 +37,11 @@ export default async function EditQuizPage({ params }: PageProps<"/quizzes/[id]/
   // RLS hides other people's quizzes, so "not yours" and "doesn't exist" look the same.
   if (!quiz || error) notFound();
 
-  return <EditorPage initial={toEditorState(quiz, questions)} ownerId={user.id} />;
+  return (
+    <EditorPage
+      initial={toEditorState(quiz, questions)}
+      ownerId={user.id}
+      aiEnabled={getAnthropicKey() !== null}
+    />
+  );
 }

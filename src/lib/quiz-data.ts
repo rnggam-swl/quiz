@@ -10,6 +10,10 @@ import type { QuizTheme } from "./theme";
 
 // ─── DB rows → editor ─────────────────────────────────────────────────────────
 
+/** The `questions` columns rowToQuestion needs. */
+export const QUESTION_COLUMNS =
+  "id, type, prompt, help, media, config, time_limit_s, points, explanation, tags";
+
 type QuestionRow = Pick<
   Tables<"questions">,
   | "id"

@@ -32,3 +32,15 @@ export function getCronSecret(): string | null {
   const secret = process.env.CRON_SECRET;
   return secret && secret.length >= 32 ? secret : null;
 }
+
+/** Claude API key for "Buat dengan AI" (P8-10). Optional: without it the feature is hidden. */
+export function getAnthropicKey(): string | null {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  return key ? key : null;
+}
+
+/** How many AI generations a host may run per 24 hours (AI_DAILY_LIMIT, default 20). */
+export function aiDailyLimit(): number {
+  const value = Number(process.env.AI_DAILY_LIMIT);
+  return Number.isInteger(value) && value > 0 ? value : 20;
+}

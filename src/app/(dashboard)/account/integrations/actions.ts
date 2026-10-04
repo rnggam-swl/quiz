@@ -187,3 +187,79 @@ export async function redeliverWebhookAction(
   if (error) return { ok: false, error: "Pengiriman tidak ditemukan." };
   return sendNow(null, id);
 }
+
+// ─── LMS platforms, LTI 1.3 (P8-08) ─────────────────────────────────────────────
+
+const MAX_PLATFORMS = 10;
+
+const httpsUrl = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `Isi ${label}.`)
+    .max(500, `${label} terlalu panjang.`)
+    .refine((raw) => checkWebhookUrl(raw).ok, `${label} harus https:// ke alamat publik.`);
+
+const platformSchema = z.object({
+  name: z.string().trim().min(1, "Beri nama LMS.").max(80, "Nama maksimal 80 huruf."),
+  issuer: httpsUrl("Issuer"),
+  clientId: z.string().trim().min(1, "Isi Client ID.").max(300, "Client ID terlalu panjang."),
+  authLoginUrl: httpsUrl("URL login (OIDC)"),
+  authTokenUrl: httpsUrl("URL token"),
+  jwksUrl: httpsUrl("URL keyset (JWKS)"),
+  deploymentIds: z.string().max(1000),
+});
+
+export type PlatformInput = z.input<typeof platformSchema>;
+
+export async function createLtiPlatformAction(input: PlatformInput): Promise<Done> {
+  await requireHost(PAGE);
+  const parsed = platformSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Tidak valid." };
+  const p = parsed.data;
+  const deploymentIds = [
+    ...new Set(
+      p.deploymentIds
+        .split(/[\s,]+/)
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (deploymentIds.some((id) => id.length > 255) || deploymentIds.length > 20) {
+    return { ok: false, error: "Deployment ID tidak valid." };
+  }
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("lti_platforms")
+    .select("id", { count: "exact", head: true });
+  if ((count ?? 0) >= MAX_PLATFORMS) {
+    return { ok: false, error: `Maksimal ${MAX_PLATFORMS} LMS. Hapus yang tidak dipakai.` };
+  }
+  const { error } = await supabase.from("lti_platforms").insert({
+    name: p.name,
+    // An issuer is compared as a string: keep it exactly as the LMS shows it.
+    issuer: p.issuer,
+    client_id: p.clientId,
+    auth_login_url: p.authLoginUrl,
+    auth_token_url: p.authTokenUrl,
+    jwks_url: p.jwksUrl,
+    deployment_ids: deploymentIds,
+  });
+  if (error?.code === "23505") {
+    return { ok: false, error: "Issuer dan Client ID ini sudah terdaftar." };
+  }
+  if (error) return { ok: false, error: "LMS gagal disimpan. Coba lagi." };
+  revalidatePath(PAGE);
+  return { ok: true };
+}
+
+export async function deleteLtiPlatformAction(platformId: string): Promise<Done> {
+  await requireHost(PAGE);
+  const id = z.uuid().parse(platformId);
+  const supabase = await createClient();
+  const { error } = await supabase.from("lti_platforms").delete().eq("id", id);
+  revalidatePath(PAGE);
+  return error ? { ok: false, error: "Gagal menghapus." } : { ok: true };
+}

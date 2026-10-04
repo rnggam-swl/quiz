@@ -10,6 +10,7 @@ import type {
   PlayerView,
   RawLiveState,
   RosterEntry,
+  TeamStanding,
 } from "./types";
 
 /**
@@ -42,6 +43,21 @@ export function choiceCounts(
     else if (type === "true_false") add(a.value);
   }
   return counts;
+}
+
+/**
+ * The team board. In a live round the team averages already hold this round's points,
+ * which would tell a phone how its team did before the reveal: scores wait until then.
+ */
+function teamBoard(raw: RawLiveState): TeamStanding[] {
+  const hide =
+    (raw.mode ?? "live") === "live" && (raw.phase === "countdown" || raw.phase === "open");
+  return raw.teams!.map(({ memberIds, ...team }) => ({
+    ...team,
+    ...(hide && { score: 0, rank: team.slot }),
+    // Who's in which team matters in the lobby only; keep the broadcast small after it.
+    ...(raw.phase === "lobby" && { memberIds }),
+  }));
 }
 
 export function livePolicy(raw: Pick<RawLiveState, "policy">): Policy {
@@ -88,6 +104,11 @@ function baseView(
       q && SHOWS_QUESTION.has(raw.phase) ? toPlayQuestion(q, Number(raw.seed ?? 0), policy) : null,
     reveal,
     winner: raw.winner ?? null,
+    buzzVariant: (raw.mode ?? "live") === "battle_buzzer" ? policy.buzzer.variant : null,
+    hold: raw.phase === "open" ? (raw.hold ?? null) : null,
+    teams: raw.teams?.length ? teamBoard(raw) : null,
+    teamsAnswered: raw.teamsAnswered ?? 0,
+    teamChoice: policy.teams.enabled && policy.teams.assign === "choose",
     royale: raw.royale ? { ...raw.royale, suddenDeathEnabled: policy.royale.suddenDeath } : null,
     top: raw.top ?? [],
     serverNow: new Date(now).toISOString(),
@@ -129,6 +150,7 @@ export function playerView(
       lives: you.lives ?? null,
       eliminatedRound: you.eliminatedRound ?? null,
       shadowScore: (you.shadowScore ?? 0) - (hide && you.spectator ? mine.points : 0),
+      team: you.team ?? null,
       answered: !!mine,
       answer: mine?.answer ?? null,
       result:

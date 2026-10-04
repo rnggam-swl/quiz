@@ -55,13 +55,19 @@ export const policySchema = z.object({
   lateJoin: z.enum(["allow", "spectator", "deny"]),
   /**
    * Rebutan (docs/10-mode-battle.md). `first_correct`: the first correct answer wins;
-   * `buzz_then_answer` (press, then answer within holdS) is a later phase.
+   * `buzz_then_answer`: press BUZZ, then answer within holdS (P8-01).
    */
   buzzer: z.object({
     variant: z.enum(["first_correct", "buzz_then_answer"]),
     holdS: z.number().int().min(1).max(30),
     /** Points taken for a wrong answer (never below a score of 0). */
     wrongPenalty: z.number().int().min(0).max(10_000),
+    /**
+     * Jeda toleransi (P8-04): right answers this long after the first one still compete,
+     * on the phones' own reaction times. 0 = the first to arrive wins. Default for older
+     * sessions too, so it has a default here.
+     */
+    graceMs: z.number().int().min(0).max(1000).default(250),
   }),
   /** Battle royale (docs/10-mode-battle.md#battle-royale). */
   royale: z.object({
@@ -73,6 +79,17 @@ export const policySchema = z.object({
     /** Out of questions with several survivors: replay them, 5 s, one mistake is out. */
     suddenDeath: z.boolean(),
   }),
+  /**
+   * Mode tim (P8-02, docs/10-mode-battle.md#mode-tim): 2–5 teams, dealt automatically or
+   * chosen in the lobby. Sessions from before teams existed have none.
+   */
+  teams: z
+    .object({
+      enabled: z.boolean(),
+      count: z.number().int().min(2).max(5),
+      assign: z.enum(["auto", "choose"]),
+    })
+    .default({ enabled: false, count: 2, assign: "auto" }),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -93,8 +110,9 @@ const PRACTICE: Policy = {
   integrity: { fullscreen: false, logTabSwitch: false, blockCopyPaste: false },
   autoAdvance: false,
   lateJoin: "allow",
-  buzzer: { variant: "first_correct", holdS: 5, wrongPenalty: 0 },
+  buzzer: { variant: "first_correct", holdS: 5, wrongPenalty: 0, graceMs: 250 },
   royale: { lives: 3, eliminateSlowest: false, shrinkTimerPct: 10, suddenDeath: true },
+  teams: { enabled: false, count: 2, assign: "auto" },
 };
 
 /** Defaults per mode; later phases fill in their own (exam P4, live P5, battle P6–P7). */

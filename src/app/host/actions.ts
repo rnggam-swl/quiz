@@ -56,9 +56,30 @@ export async function advanceLiveAction(
   const parsed = actionSchema.safeParse(action);
   if (!supabase) return { ok: false, error: "unauthorized" };
   if (!parsed.success || !Number.isSafeInteger(version)) return { ok: false, error: "invalid" };
+  // Buka serentak (P8-03): a countdown that has run out opens as of its scheduled end.
+  if (parsed.data === "auto") await supabase.rpc("open_due_round", { p_session_id: sessionId });
+  // Jeda toleransi (P8-04): a rebutan window still deciding its winner finishes first.
+  if (parsed.data === "next" || parsed.data === "auto" || parsed.data === "end") {
+    for (let tries = 0; tries < 3; tries++) {
+      const { data } = await supabase.rpc("resolve_buzzer_round", { p_session_id: sessionId });
+      const result = data as { status: string; waitMs?: number } | null;
+      if (result?.status !== "pending") break;
+      await new Promise((resolve) => setTimeout(resolve, (result.waitMs ?? 0) + 20));
+    }
+  }
+  // Mode tim (P8-02): whoever has no team yet (didn't pick, or came late) gets one first.
+  // Placing them moves the version on by one.
+  let current = version;
+  if (parsed.data === "next") {
+    const { data: placed } = await supabase.rpc("assign_teams", {
+      p_session_id: sessionId,
+      p_force: true,
+    });
+    if (placed) current += 1;
+  }
   const { data, error } = await supabase.rpc("advance_live", {
     p_session_id: sessionId,
-    p_version: version,
+    p_version: current,
     p_action: parsed.data,
   });
   if (error || !data)
@@ -82,6 +103,15 @@ export async function liveSettingsAction(
     ...(autoAdvance !== undefined && { p_auto_advance: autoAdvance }),
   });
   if (error || !data) return { ok: false, error: "not_found" };
+  return viewAfter(supabase, sessionId, { changed: true });
+}
+
+/** Mode tim (P8-02): deal everyone out again, in the lobby. */
+export async function shuffleTeamsAction(sessionId: string): Promise<Result<{ view: HostView }>> {
+  const supabase = await hostClient(sessionId);
+  if (!supabase) return { ok: false, error: "unauthorized" };
+  const { error } = await supabase.rpc("shuffle_teams", { p_session_id: sessionId });
+  if (error) return { ok: false, error: "not_found" };
   return viewAfter(supabase, sessionId, { changed: true });
 }
 

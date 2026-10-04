@@ -72,6 +72,9 @@ export function withYou(
     you.result = null;
   }
   if (kicked.includes(you.id)) you.kicked = true;
+  // Mode tim: the lobby lists who is in which team (after a shuffle, a choice).
+  const team = next.teams?.find((t) => t.memberIds?.includes(you.id));
+  if (team) you.team = { id: team.id, slot: team.slot, name: team.name };
   if (next.phase === "reveal" && you.answered && !you.result) {
     const ratio = localRatio(next, you.answer);
     if (ratio !== null) you.result = { ratio, points: null };

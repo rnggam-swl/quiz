@@ -17,6 +17,9 @@ const one = async <T = Row>(tx: Transaction, sql: string, params: unknown[] = []
 type Session = { id: string; phase: string; state_version: number; current_round: number | null };
 type Outcome = {
   accepted: boolean;
+  pending?: boolean;
+  reactionMs?: number;
+  resolveInMs?: number;
   won?: boolean;
   correct?: boolean;
   points?: number;
@@ -59,7 +62,11 @@ beforeAll(async () => {
 const asHost = <T>(fn: (tx: Transaction) => Promise<T>) => as(db, user(host), fn, { commit: true });
 const asService = <T>(fn: (tx: Transaction) => Promise<T>) => as(db, service, fn, { commit: true });
 
-async function newSession(mode = "battle_buzzer"): Promise<string> {
+/** A session in the lobby. Without a grace window unless asked: the first right answer wins. */
+async function newSession(
+  mode = "battle_buzzer",
+  buzzer: Record<string, unknown> = { graceMs: 0 },
+): Promise<string> {
   return asHost(
     async (tx) =>
       (
@@ -67,9 +74,9 @@ async function newSession(mode = "battle_buzzer"): Promise<string> {
           tx,
           `insert into public.sessions
            (quiz_id, quiz_version_id, mode, status, phase, code, policy, seed, question_ids)
-         values ($1, $2, $3, 'lobby', 'lobby', public.generate_session_code(), '{}', 1, $4)
+         values ($1, $2, $3, 'lobby', 'lobby', public.generate_session_code(), $5, 1, $4)
          returning id`,
-          [quizId, versionId, mode, [q1, q2]],
+          [quizId, versionId, mode, [q1, q2], JSON.stringify({ buzzer })],
         )
       ).id,
   );
@@ -100,12 +107,26 @@ async function openRound(sessionId: string) {
   );
 }
 
-const buzz = (participantId: string, questionId: string, correct: boolean, penalty = 0) =>
+const buzz = (
+  participantId: string,
+  questionId: string,
+  correct: boolean,
+  penalty = 0,
+  clientMs: number | null = null,
+) =>
   asService((tx) =>
     one<{ outcome: Outcome }>(
       tx,
-      "select public.record_battle_answer($1, $2, $3, $4, $5, $6) as outcome",
-      [participantId, questionId, JSON.stringify({ value: correct }), correct, 1000, penalty],
+      "select public.record_battle_answer($1, $2, $3, $4, $5, $6, $7) as outcome",
+      [
+        participantId,
+        questionId,
+        JSON.stringify({ value: correct }),
+        correct,
+        1000,
+        penalty,
+        clientMs,
+      ],
     ).then((r) => r.outcome),
   );
 
@@ -267,5 +288,206 @@ describe("live_state for battle", () => {
       ]),
     ).then((r) => r.state.you);
     expect(you.answer).toMatchObject({ correct: 0, total: 1, points: 0 });
+  });
+});
+
+describe("jeda toleransi (P8-04)", () => {
+  const resolve =
+    (actor = service) =>
+    (sessionId: string) =>
+      as(
+        db,
+        actor,
+        async (tx) =>
+          (
+            await one<{ r: { status: string; waitMs?: number; winnerId?: string } }>(
+              tx,
+              "select public.resolve_buzzer_round($1) as r",
+              [sessionId],
+            )
+          ).r,
+        { commit: true },
+      );
+
+  it("lets the fastest reaction in the window win, not the first to arrive", async () => {
+    const sessionId = await newSession("battle_buzzer", { graceMs: 250 });
+    const ani = await join(sessionId, "Ani");
+    const budi = await join(sessionId, "Budi");
+    const caca = await join(sessionId, "Caca");
+    const dodi = await join(sessionId, "Dodi");
+    await openRound(sessionId);
+    // The question has been up for 2 s.
+    await db.query(
+      "update public.battle_rounds set opened_at = now() - interval '2 seconds' where session_id = $1",
+      [sessionId],
+    );
+
+    // Ani arrives first (tapped at 1.95 s), Budi second but tapped at 1.8 s.
+    const first = await buzz(ani.id, q1, true, 0, 1950);
+    expect(first).toMatchObject({ accepted: true, pending: true, reactionMs: 1950 });
+    expect(first.resolveInMs).toBeGreaterThan(0);
+    expect(await buzz(budi.id, q1, true, 0, 1800)).toMatchObject({
+      pending: true,
+      reactionMs: 1800,
+    });
+    // A phone claiming 50 ms gets at most 300 ms of credit.
+    const liar = await buzz(caca.id, q1, false, 0, 50);
+    expect(liar.reactionMs).toBeGreaterThanOrEqual(1700);
+
+    expect(await resolve()(sessionId)).toMatchObject({ status: "pending" });
+    expect((await session(sessionId)).phase).toBe("open");
+
+    // The window is over.
+    await db.query(
+      "update public.battle_rounds set resolve_at = now() - interval '1 millisecond' where session_id = $1",
+      [sessionId],
+    );
+    expect(await buzz(dodi.id, q1, true)).toMatchObject({
+      accepted: false,
+      reason: "round_closed",
+    });
+    expect(await resolve()(sessionId)).toEqual({ status: "resolved", winnerId: budi.id });
+    expect(await resolve()(sessionId)).toEqual({ status: "none" }); // only once
+    expect((await session(sessionId)).phase).toBe("reveal");
+
+    const rows = await asHost((tx) =>
+      tx.query<{ nickname: string; score: number; streak: number }>(
+        "select nickname, score, streak from public.participants where session_id = $1 order by nickname",
+        [sessionId],
+      ),
+    );
+    expect(rows.rows.map((r) => [r.nickname, r.score, r.streak])).toEqual([
+      ["Ani", 0, 0],
+      ["Budi", 1000, 1],
+      ["Caca", 0, 0],
+      ["Dodi", 0, 0],
+    ]);
+  });
+
+  it("is resolved only by the service role or the session's host", async () => {
+    const sessionId = await newSession("battle_buzzer", { graceMs: 250 });
+    const ani = await join(sessionId, "Ani");
+    await openRound(sessionId);
+    await buzz(ani.id, q1, true);
+    await db.query(
+      "update public.battle_rounds set resolve_at = now() - interval '1 millisecond' where session_id = $1",
+      [sessionId],
+    );
+    const stranger = await createUser(db, { email: "asing@sekolah.id" });
+    expect(await resolve(user(stranger))(sessionId)).toEqual({ status: "none" });
+    expect(await resolve(user(host))(sessionId)).toEqual({ status: "resolved", winnerId: ani.id });
+  });
+});
+
+describe("pencet lalu jawab (P8-01)", () => {
+  type Buzz = {
+    accepted: boolean;
+    reason?: string;
+    holder?: { nickname: string };
+    expiresAt?: string;
+  };
+  const buzzIn = (participantId: string, questionId = q1) =>
+    asService((tx) =>
+      one<{ r: Buzz }>(tx, "select public.buzz_in($1, $2) as r", [participantId, questionId]).then(
+        (r) => r.r,
+      ),
+    );
+  const hold = (sessionId: string) =>
+    asHost((tx) =>
+      one<{ s: { hold: { nickname: string } | null } }>(
+        tx,
+        "select public.live_game_state($1) as s",
+        [sessionId],
+      ).then((r) => r.s.hold),
+    );
+
+  it("gives the round to one buzzer at a time; wrong or too slow opens it again", async () => {
+    const sessionId = await newSession("battle_buzzer", {
+      variant: "buzz_then_answer",
+      holdS: 5,
+      wrongPenalty: 100,
+    });
+    const ani = await join(sessionId, "Ani");
+    const budi = await join(sessionId, "Budi");
+    const caca = await join(sessionId, "Caca");
+    await db.query("update public.participants set score = 300 where session_id = $1", [sessionId]);
+    await openRound(sessionId);
+
+    // No answering without holding the buzzer.
+    expect(await buzz(ani.id, q1, true)).toMatchObject({ accepted: false, reason: "not_holding" });
+
+    const before = await session(sessionId);
+    expect(await buzzIn(ani.id)).toMatchObject({ accepted: true });
+    expect((await session(sessionId)).state_version).toBe(before.state_version + 1);
+    expect(await hold(sessionId)).toMatchObject({ nickname: "Ani" });
+    expect(await buzzIn(budi.id)).toMatchObject({
+      accepted: false,
+      reason: "held",
+      holder: { nickname: "Ani" },
+    });
+    expect(await buzz(budi.id, q1, true)).toMatchObject({ reason: "not_holding" });
+
+    // Ani is wrong: penalty, out for this question, the buzzer is free.
+    expect(await buzz(ani.id, q1, false, 100)).toMatchObject({
+      accepted: true,
+      won: false,
+      points: -100,
+    });
+    expect(await hold(sessionId)).toBeNull();
+    expect(await buzzIn(ani.id)).toMatchObject({ accepted: false, reason: "already_answered" });
+
+    // Budi buzzes but lets the hold run out; Caca's buzz expires it.
+    expect(await buzzIn(budi.id)).toMatchObject({ accepted: true });
+    await db.query(
+      `update public.buzzer_holds h set expires_at = now() - interval '2 seconds'
+         from public.battle_rounds r where r.id = h.round_id and r.session_id = $1`,
+      [sessionId],
+    );
+    expect(await buzzIn(caca.id)).toMatchObject({ accepted: true });
+    expect(await buzzIn(budi.id)).toMatchObject({ accepted: false, reason: "already_answered" });
+
+    // Caca is right: the round is hers.
+    expect(await buzz(caca.id, q1, true)).toMatchObject({
+      accepted: true,
+      won: true,
+      points: 1000,
+    });
+    expect((await session(sessionId)).phase).toBe("reveal");
+
+    const rows = await asHost((tx) =>
+      tx.query<{ nickname: string; score: number }>(
+        "select nickname, score from public.participants where session_id = $1 order by nickname",
+        [sessionId],
+      ),
+    );
+    expect(rows.rows.map((r) => [r.nickname, r.score])).toEqual([
+      ["Ani", 200],
+      ["Budi", 200], // the timeout cost the penalty too
+      ["Caca", 1300],
+    ]);
+  });
+
+  it("refuses an answer after the hold ran out", async () => {
+    const sessionId = await newSession("battle_buzzer", { variant: "buzz_then_answer" });
+    const ani = await join(sessionId, "Ani");
+    await openRound(sessionId);
+    await buzzIn(ani.id);
+    await db.query(
+      `update public.buzzer_holds h set expires_at = now() - interval '2 seconds'
+         from public.battle_rounds r where r.id = h.round_id and r.session_id = $1`,
+      [sessionId],
+    );
+    expect(await buzz(ani.id, q1, true)).toMatchObject({ accepted: false, reason: "hold_expired" });
+    expect(await hold(sessionId)).toBeNull();
+  });
+
+  it("is only for the buzz variant and the service role", async () => {
+    const sessionId = await newSession();
+    const ani = await join(sessionId, "Ani");
+    await openRound(sessionId);
+    await expect(buzzIn(ani.id)).rejects.toThrow(/wrong_mode/);
+    await expect(
+      as(db, user(host), (tx) => tx.query("select public.buzz_in($1, $2)", [ani.id, q1])),
+    ).rejects.toThrow(/permission denied/);
   });
 });

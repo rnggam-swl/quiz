@@ -11,6 +11,7 @@ import { QuestionView, answersOnTap } from "@/components/player/QuestionView";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toast";
+import { openOnTime } from "@/engine/live/phases";
 import { openSignedState, PERSONAL_PHASES, withYou } from "@/engine/live/signed";
 import type { BattleOutcome, GameMode, LivePlayerAdapter, PlayerView } from "@/engine/live/types";
 import { NICKNAME_MAX } from "@/engine/practice/nickname";
@@ -23,6 +24,7 @@ import { playSound } from "@/lib/sound";
 
 import { Avatar } from "./Avatar";
 import { Hearts } from "./RoyaleStages";
+import { TeamChip, TeamPicker } from "./Teams";
 import { answerFor, choicesOf, isCorrectChoice, isMultiSelect, keysOf } from "./choices";
 import { useChannel, useLiveState, useNow, useServerOffset } from "./hooks";
 
@@ -230,7 +232,11 @@ function Game({
     },
     [publicKey, sessionId],
   );
-  const { view, refresh, connected } = useLiveState<PlayerView>({
+  const {
+    view: state,
+    refresh,
+    connected,
+  } = useLiveState<PlayerView>({
     fetchState,
     channel,
     // Events do the work while connected; the slow poll only catches lost ones.
@@ -238,6 +244,10 @@ function Game({
     onError,
     fromEvent,
   });
+  // Buka serentak (P8-03): the question appears when the countdown ends by the server
+  // clock, on every phone at once, without waiting for the "open" event.
+  const now = useNow(100, state?.phase === "countdown" && !state.paused);
+  const view = state && openOnTime(state, now + offset);
 
   // Points, score and rank change at the reveal (and the end): fetch them then, spread
   // over a second so the whole room doesn't ask at once.
@@ -260,6 +270,18 @@ function Game({
     const timer = setTimeout(() => setShowQuestion(readStorage(SHOW_QUESTION_KEY) !== "0"), 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // Rebutan "Pencet lalu Jawab" (P8-01): the buzzer this phone just took.
+  const [myHold, setMyHold] = useState<{ questionId: string; expiresAt: string } | null>(null);
+  const [buzzing, setBuzzing] = useState(false);
+
+  // When the open question appeared on this phone, for the reaction time (P8-04).
+  const shown = useRef<{ id: string; at: number } | null>(null);
+  const openId = view?.phase === "open" ? (view.question?.id ?? null) : null;
+  useEffect(() => {
+    if (openId && shown.current?.id !== openId)
+      shown.current = { id: openId, at: performance.now() };
+  }, [openId]);
 
   // What this phone just sent, until the server confirms it (optimistic).
   const [sent, setSent] = useState<{ questionId: string; answer: unknown } | null>(null);
@@ -303,10 +325,42 @@ function Game({
     );
   }, [podium, rank]);
 
+  const [choosing, setChoosing] = useState(false);
+  async function pickTeam(teamId: string) {
+    if (!adapter.chooseTeam) return;
+    setChoosing(true);
+    const result = await adapter.chooseTeam(token, teamId).catch(() => null);
+    setChoosing(false);
+    if (!result?.ok) toast.error("Gagal memilih tim. Coba lagi.");
+    void refresh();
+  }
+
+  async function pressBuzz(q: PlayQuestion) {
+    if (!adapter.buzz || buzzing) return;
+    setBuzzing(true);
+    const result = await adapter.buzz(token, q.id).catch(() => null);
+    setBuzzing(false);
+    if (result?.ok) {
+      setMyHold({ questionId: q.id, expiresAt: result.expiresAt });
+      playSound("buzzer");
+      vibrate();
+    } else if (result?.error === "held") {
+      vibrate(); // someone was faster; the broadcast shows who
+    } else if (result?.error === "team_answered") {
+      toast("Temanmu sudah menjawab soal ini untuk tim.");
+    } else if (result && result.error !== "already_answered") {
+      toast.error(result.error === "round_closed" ? "Soal sudah ditutup." : "Gagal. Coba lagi.");
+    }
+    void refresh();
+  }
+
   async function submit(q: PlayQuestion, answer: unknown) {
     setSent({ questionId: q.id, answer });
     playSound("tap");
-    const result = await adapter.answer(token, q.id, answer).catch(() => null);
+    // This phone's reaction time; the server trusts it only within bounds (P8-04).
+    const clientMs =
+      shown.current?.id === q.id ? Math.round(performance.now() - shown.current.at) : undefined;
+    const result = await adapter.answer(token, q.id, answer, clientMs).catch(() => null);
     const buzzer = view?.mode === "battle_buzzer";
     if (result?.ok && buzzer && result.outcome) {
       setBattle({ questionId: q.id, outcome: result.outcome });
@@ -321,10 +375,15 @@ function Game({
       vibrate();
     } else if (!result?.ok && result?.error !== "already_answered") {
       setSent(null);
+      if (result?.error === "hold_expired" || result?.error === "not_holding") setMyHold(null);
       toast.error(
         result?.error === "round_closed" || result?.error === "deadline_passed"
           ? "Waktu habis, jawaban tidak terkirim."
-          : "Jawaban gagal terkirim. Coba lagi.",
+          : result?.error === "hold_expired" || result?.error === "not_holding"
+            ? "Waktu menjawabmu habis."
+            : result?.error === "team_answered"
+              ? "Temanmu sudah menjawab soal ini untuk tim."
+              : "Jawaban gagal terkirim. Coba lagi.",
       );
     }
     void refresh();
@@ -342,12 +401,17 @@ function Game({
   const q = view.question;
   const answeredNow = you.answered || (!!q && sent?.questionId === q.id);
   const myAnswer = you.answered ? you.answer : sent?.questionId === q?.id ? sent?.answer : null;
+  const buzzMode = view.buzzVariant === "buzz_then_answer";
+  const holding = buzzMode && !!q && (myHold?.questionId === q.id || view.hold?.id === you.id);
+  const holdExpiresAt =
+    myHold && q && myHold.questionId === q.id ? myHold.expiresAt : (view.hold?.expiresAt ?? null);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-fg">
       <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-2">
         <Avatar id={you.id} className="size-8 text-base" />
         <span className="min-w-0 flex-1 truncate font-semibold">{you.nickname}</span>
+        {you.team && <TeamChip team={you.team} className="text-xs" />}
         {view.royale &&
           (you.spectator ? (
             <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium">
@@ -384,6 +448,21 @@ function Game({
             <Avatar id={you.id} className="size-24 text-5xl" />
             <p className="text-2xl font-bold">Kamu masuk!</p>
             <p className="text-fg-muted">Lihat layar depan. Menunggu host memulai…</p>
+            {view.teams &&
+              (view.teamChoice && adapter.chooseTeam ? (
+                <TeamPicker
+                  teams={view.teams}
+                  current={you.team?.id ?? null}
+                  busy={choosing}
+                  onPick={(teamId) => void pickTeam(teamId)}
+                />
+              ) : you.team ? (
+                <p className="flex items-center gap-2 text-lg">
+                  Kamu di <TeamChip team={you.team} />
+                </p>
+              ) : (
+                <p className="text-fg-muted">Host akan membagi tim saat mulai.</p>
+              ))}
             {view.royale && (
               <p className="flex items-center gap-2 text-fg-muted">
                 Battle royale: kamu punya{" "}
@@ -398,6 +477,8 @@ function Game({
             <Center>
               <p className="text-lg">Kamu bergabung saat permainan berjalan, jadi kamu menonton.</p>
             </Center>
+          ) : buzzMode && !answeredNow && battle?.questionId !== q.id && !holding ? (
+            <BuzzPad view={view} offset={offset} busy={buzzing} onBuzz={() => void pressBuzz(q)} />
           ) : view.mode === "battle_buzzer" && (answeredNow || battle?.questionId === q.id) ? (
             <BuzzerWait
               you={you}
@@ -420,6 +501,7 @@ function Game({
                   Tetap jawab untuk <strong>poin bayangan</strong>.
                 </p>
               )}
+              {holding && holdExpiresAt && <HoldTimer expiresAt={holdExpiresAt} offset={offset} />}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-fg-muted">
                   Soal {(view.round ?? 0) + 1}/{view.questionCount}
@@ -473,12 +555,14 @@ function Game({
         ) : view.phase === "leaderboard" ? (
           <Center>
             <Trophy className="size-12 text-warning" aria-hidden />
+            <TeamStandingLine view={view} />
             <p className="text-lg text-fg-muted">Peringkatmu</p>
             <p className="text-6xl font-bold tabular-nums">#{you.rank ?? "…"}</p>
             <p className="text-xl font-semibold tabular-nums">{you.score} poin</p>
           </Center>
         ) : view.phase === "podium" || view.phase === "ended" ? (
           <Center>
+            <TeamStandingLine view={view} />
             <p className="text-lg text-fg-muted">Peringkat akhir</p>
             <p className="text-6xl font-bold tabular-nums">#{you.rank ?? "…"}</p>
             {view.royale ? (
@@ -538,6 +622,81 @@ function Countdown({ view, offset }: { view: PlayerView; offset: number }) {
         {Math.max(1, Math.ceil(left / 1000))}
       </span>
     </Center>
+  );
+}
+
+/** Mode tim: how this phone's team stands (leaderboard, podium). */
+function TeamStandingLine({ view }: { view: PlayerView }) {
+  const mine = view.teams?.find((t) => t.id === view.you.team?.id);
+  if (!mine || !view.teams) return null;
+  return (
+    <p className="flex flex-wrap items-center justify-center gap-2 text-lg">
+      <TeamChip team={mine} /> peringkat {mine.rank} dari {view.teams.length}
+    </p>
+  );
+}
+
+/** Rebutan "Pencet lalu Jawab" (P8-01): BUZZ, or who is answering right now. */
+function BuzzPad({
+  view,
+  offset,
+  busy,
+  onBuzz,
+}: {
+  view: PlayerView;
+  offset: number;
+  busy: boolean;
+  onBuzz: () => void;
+}) {
+  const now = useNow(250);
+  const hold = view.hold;
+  const holdLeft = hold ? (msUntil(hold.expiresAt, offset, now) ?? 0) : 0;
+  const held = !!hold && holdLeft > 0;
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-fg-muted">
+          Soal {(view.round ?? 0) + 1}/{view.questionCount}
+        </span>
+        <TimeLeft view={view} offset={offset} />
+      </div>
+      {view.question?.prompt && (
+        <p className="text-center text-lg font-semibold text-balance">{view.question.prompt}</p>
+      )}
+      <div className="flex flex-1 flex-col items-center justify-center gap-3" aria-live="polite">
+        {held ? (
+          <p className="text-center text-xl">
+            <strong>{hold.nickname}</strong> sedang menjawab…{" "}
+            <span className="tabular-nums">{Math.ceil(holdLeft / 1000)}</span>
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onBuzz}
+              disabled={busy}
+              className="size-56 rounded-full bg-danger text-5xl font-black tracking-wide text-on-accent shadow-pop transition-transform active:scale-95 disabled:opacity-70"
+            >
+              BUZZ
+            </button>
+            <p className="text-sm text-fg-muted">Tekan duluan, lalu jawab.</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HoldTimer({ expiresAt, offset }: { expiresAt: string; offset: number }) {
+  const now = useNow(250);
+  const left = Math.max(0, Math.ceil((msUntil(expiresAt, offset, now) ?? 0) / 1000));
+  return (
+    <p
+      role="timer"
+      className="animate-pop rounded-xl bg-warning-soft px-3 py-2 text-center font-semibold text-warning"
+    >
+      Buzzer milikmu! Jawab dalam {left} dtk
+    </p>
   );
 }
 

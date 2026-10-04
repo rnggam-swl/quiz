@@ -103,6 +103,12 @@ export type PlayError =
   | "kicked"
   | "spectator"
   | "round_closed"
+  // Rebutan "Pencet lalu Jawab" (P8-01)
+  | "held"
+  | "not_holding"
+  | "hold_expired"
+  // Mode tim (P8-02): a teammate already answered this question
+  | "team_answered"
   | "network";
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; error: PlayError };

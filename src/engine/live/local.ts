@@ -5,7 +5,7 @@ import type { Snapshot } from "@/engine/practice/snapshot";
 import type { PlayError } from "@/engine/practice/types";
 import type { MemoryHub } from "@/engine/transport/memory";
 import { generateSigningKeys } from "@/engine/transport/signing";
-import { createRandom, randomSeed } from "@/lib/seed-random";
+import { createRandom, randomSeed, shuffle } from "@/lib/seed-random";
 
 import { liveQuestionOrder } from "./form";
 import { signState } from "./signed";
@@ -27,7 +27,10 @@ import type {
   LivePlayerAdapter,
   RawLiveState,
   Standing,
+  TeamRef,
+  TeamStanding,
 } from "./types";
+import { TEAM_NAMES } from "./types";
 import { hostView, playerView, sharedView } from "./view";
 
 type LocalAnswer = {
@@ -52,6 +55,8 @@ type LocalPlayer = {
   lives: number | null;
   eliminatedRound: number | null;
   shadowScore: number;
+  /** Mode tim (P8-02). */
+  teamId: string | null;
   /** By round index (royale's sudden death asks a question again). */
   answers: Map<number, LocalAnswer>;
 };
@@ -63,6 +68,8 @@ type Round = {
   closesAt: number | null;
   /** Rebutan: who answered right first. */
   winner: string | null;
+  /** Rebutan "Pencet lalu Jawab": who holds the buzzer, until when. */
+  hold?: { id: string; expiresAt: number } | null;
 };
 
 /**
@@ -105,6 +112,62 @@ export function createLocalLive(
   const active = () => [...players.values()].filter((p) => !p.kicked && !p.spectator);
   const current = () => (s.round === null ? undefined : rounds[s.round]);
 
+  // ── Mode tim (P8-02), as supabase/migrations/…_teams.sql ──
+  const teams: TeamRef[] = policy.teams.enabled
+    ? TEAM_NAMES.slice(0, policy.teams.count).map((name, i) => ({
+        id: `local-team-${i + 1}`,
+        slot: (i + 1) as TeamRef["slot"],
+        name,
+      }))
+    : [];
+  const membersOf = (teamId: string) =>
+    [...players.values()].filter((p) => p.teamId === teamId && !p.kicked);
+
+  /** assign_teams: into the smallest team (ties: the lowest slot). */
+  function placeInTeam(p: LocalPlayer) {
+    if (teams.length === 0 || p.teamId) return;
+    const smallest = [...teams].sort(
+      (a, b) => membersOf(a.id).length - membersOf(b.id).length || a.slot - b.slot,
+    )[0]!;
+    p.teamId = smallest.id;
+  }
+
+  /** team_already_played: a teammate answered (or buzzed and lost) this round. */
+  function teamPlayed(p: LocalPlayer): boolean {
+    return (
+      !!p.teamId &&
+      [...players.values()].some((o) => o !== p && o.teamId === p.teamId && o.answers.has(s.round!))
+    );
+  }
+
+  function teamBoard(): TeamStanding[] {
+    const rows = teams.map((t) => {
+      const members = membersOf(t.id).filter((m) => !m.spectator || m.eliminatedRound !== null);
+      const alive = members.filter((m) => m.eliminatedRound === null);
+      const sum = (list: LocalPlayer[], f: (m: LocalPlayer) => number) =>
+        list.reduce((total, m) => total + f(m), 0);
+      const score =
+        mode === "live"
+          ? Math.round(sum(members, (m) => m.score) / (members.length || 1))
+          : mode === "battle_royale"
+            ? sum(alive, (m) => Math.max(0, m.lives ?? 0))
+            : sum(members, (m) => m.score);
+      return {
+        ...t,
+        members: members.length,
+        alive: alive.length,
+        score,
+        rank: 0,
+        memberIds: members.map((m) => m.id),
+      };
+    });
+    const better = (a: TeamStanding, b: TeamStanding) =>
+      mode === "battle_royale" && a.alive !== b.alive ? a.alive > b.alive : a.score > b.score;
+    return rows
+      .map((r) => ({ ...r, rank: 1 + rows.filter((o) => better(o, r)).length }))
+      .sort((a, b) => a.rank - b.rank || a.slot - b.slot);
+  }
+
   function bump(kicked?: string[]) {
     s.version++;
     const version = s.version;
@@ -112,6 +175,30 @@ export function createLocalLive(
     void keys
       .then(({ privateKey }) => signState(privateKey, { view, ...(kicked && { kicked }) }))
       .then((signed) => hub.broadcast(sessionId, { type: "state", version, signed }));
+  }
+
+  /**
+   * As open_due_round (P8-03): once the countdown is over, the round is open as of its
+   * scheduled end, whoever notices first (the host's timer or an early answer).
+   */
+  function openDue(): boolean {
+    const round = current();
+    if (
+      s.phase !== "countdown" ||
+      s.pausedAt !== null ||
+      s.phaseClosesAt === null ||
+      Date.now() < s.phaseClosesAt ||
+      !round
+    )
+      return false;
+    round.openedAt = s.phaseClosesAt;
+    round.closesAt = s.phaseClosesAt + round.limitMs;
+    s.phase = "open";
+    s.phaseOpenedAt = round.openedAt;
+    s.phaseClosesAt = round.closesAt;
+    scheduleBots(round.questionId, round.closesAt - Date.now());
+    bump();
+    return true;
   }
 
   function setPhase(phase: LivePhase, closesInMs: number | null) {
@@ -201,6 +288,16 @@ export function createLocalLive(
       mode,
       roundId: s.round === null ? null : `local-round-${s.round}`,
       winner: winner ? { id: winner.id, nickname: winner.nickname } : null,
+      ...(mode === "battle_buzzer" && {
+        hold:
+          round?.hold && players.get(round.hold.id)
+            ? {
+                id: round.hold.id,
+                nickname: players.get(round.hold.id)!.nickname,
+                expiresAt: iso(round.hold.expiresAt)!,
+              }
+            : null,
+      }),
       versionId: "local",
       seed,
       policy,
@@ -227,6 +324,17 @@ export function createLocalLive(
             ).length
           : 0,
       top: ["leaderboard", "podium", "ended"].includes(s.phase) ? standings() : [],
+      ...(teams.length > 0 && {
+        teams: teamBoard(),
+        teamsAnswered:
+          s.round === null
+            ? 0
+            : new Set(
+                [...players.values()]
+                  .filter((p) => p.teamId && p.answers.has(s.round!))
+                  .map((p) => p.teamId),
+              ).size,
+      }),
       ...(mode === "battle_royale" && { royale: royaleInfo() }),
       ...(you && {
         you: {
@@ -239,6 +347,7 @@ export function createLocalLive(
           lives: you.lives,
           eliminatedRound: you.eliminatedRound,
           shadowScore: you.shadowScore,
+          team: teams.find((t) => t.id === you.teamId) ?? null,
           rank:
             mode === "battle_royale"
               ? royaleRanking().indexOf(you) + 1
@@ -285,8 +394,61 @@ export function createLocalLive(
 
   type Recorded = { error: PlayError } | { outcome?: BattleOutcome };
 
-  function record(p: LocalPlayer, questionId: string, raw: unknown): Recorded {
+  const buzzVariant = mode === "battle_buzzer" && policy.buzzer.variant === "buzz_then_answer";
+
+  /** As expire_buzzer_hold: a hold that ran out counts as a wrong answer. */
+  function expireHold(round: Round) {
+    const holder = round.hold ? players.get(round.hold.id) : undefined;
+    const timeMs = round.hold ? Math.max(0, round.hold.expiresAt - (round.openedAt ?? 0)) : 0;
+    round.hold = null;
+    if (!holder || holder.answers.has(s.round!)) return;
+    const points = -Math.min(policy.buzzer.wrongPenalty, holder.score) || 0; // no -0
+    holder.score += points;
+    holder.streak = 0;
+    holder.answers.set(s.round!, {
+      answer: { timeout: true },
+      correct: 0,
+      total: 1,
+      points,
+      timeMs,
+      shadow: false,
+    });
+  }
+
+  /** As buzz_in (P8-01). */
+  function buzzIn(
+    p: LocalPlayer,
+    questionId: string,
+  ): { error: PlayError } | { expiresAt: number } {
+    openDue();
     const round = current();
+    if (!buzzVariant) return { error: "invalid" };
+    if (s.phase !== "open" || !round || round.questionId !== questionId || round.winner)
+      return { error: "round_closed" };
+    if (p.answers.has(s.round!)) return { error: "already_answered" };
+    if (teamPlayed(p)) return { error: "team_answered" };
+    if (round.hold && round.hold.expiresAt > Date.now()) return { error: "held" };
+    if (round.hold) expireHold(round);
+    round.hold = { id: p.id, expiresAt: Date.now() + policy.buzzer.holdS * 1000 };
+    bump();
+    return { expiresAt: round.hold.expiresAt };
+  }
+
+  function record(p: LocalPlayer, questionId: string, raw: unknown): Recorded {
+    openDue();
+    const round = current();
+    if (mode === "battle_buzzer" && s.phase === "open" && teamPlayed(p)) {
+      return { error: "team_answered" };
+    }
+    if (buzzVariant && round && s.phase === "open" && round.questionId === questionId) {
+      if (round.hold?.id !== p.id) return { error: "not_holding" };
+      if (Date.now() > round.hold.expiresAt + ANSWER_GRACE_MS) {
+        expireHold(round);
+        bump();
+        return { error: "hold_expired" };
+      }
+      round.hold = null;
+    }
     if (s.phase !== "open" || !round || round.questionId !== questionId || round.openedAt === null)
       return { error: "round_closed" };
     if (round.closesAt !== null && Date.now() > round.closesAt + ANSWER_GRACE_MS)
@@ -371,6 +533,8 @@ export function createLocalLive(
     if (correct) {
       setPhase("reveal", REVEAL_MS);
       bump();
+    } else if (buzzVariant) {
+      bump(); // the buzzer is free again
     }
     return { outcome: { won: correct, correct, points } };
   }
@@ -405,7 +569,17 @@ export function createLocalLive(
         };
       }
       if (answer === null || random() < 0.1) continue; // some bots don't answer
-      setTimeout(() => void record(p, questionId, answer), 800 + random() * limitMs * 0.7);
+      const delay = 800 + random() * limitMs * 0.7;
+      if (buzzVariant) {
+        // Press BUZZ, think a moment, answer (if they got the buzzer).
+        setTimeout(() => {
+          if ("expiresAt" in buzzIn(p, questionId)) {
+            setTimeout(() => void record(p, questionId, answer), 700 + random() * 1500);
+          }
+        }, delay);
+      } else {
+        setTimeout(() => void record(p, questionId, answer), delay);
+      }
     }
   }
 
@@ -485,6 +659,7 @@ export function createLocalLive(
       (s.pausedAt !== null || s.phaseClosesAt === null || now < s.phaseClosesAt)
     )
       return;
+    if (action === "auto" && openDue()) return;
     if (action === "end") {
       setPhase(s.phase === "lobby" || s.phase === "podium" ? "ended" : "podium", null);
       return bump();
@@ -497,6 +672,7 @@ export function createLocalLive(
       ? alive > 1 &&
         (s.round! + 1 < count || (policy.royale.suddenDeath && s.round! + 1 < count + 10))
       : s.round! + 1 < count;
+    if (s.phase === "lobby") for (const p of players.values()) placeInTeam(p);
     if (s.phase === "lobby" || (s.phase === "leaderboard" && more)) {
       const idx = s.phase === "lobby" ? 0 : s.round! + 1;
       const q = snapshot.questions.find((x) => x.id === questionIds[idx % count])!;
@@ -557,9 +733,11 @@ export function createLocalLive(
       lives: null,
       eliminatedRound: null,
       shadowScore: 0,
+      teamId: null,
       answers: new Map(),
     };
     players.set(p.id, p);
+    if (policy.teams.assign === "auto" || late) placeInTeam(p);
     return p;
   }
 
@@ -585,6 +763,17 @@ export function createLocalLive(
       const p = players.get(participantId);
       if (p) p.kicked = true;
       bump([participantId]);
+      return { ok: true, view: hostSnapshot() };
+    },
+    async shuffleTeams() {
+      await wait();
+      if (s.phase !== "lobby" || teams.length === 0) return { ok: false, error: "invalid" };
+      const everyone = shuffle(
+        [...players.values()].filter((p) => !p.kicked),
+        randomSeed(),
+      );
+      everyone.forEach((p, i) => (p.teamId = teams[i % teams.length]!.id));
+      bump();
       return { ok: true, view: hostSnapshot() };
     },
   };
@@ -614,6 +803,27 @@ export function createLocalLive(
       if (p.spectator && mode !== "battle_royale") return { ok: false, error: "spectator" };
       const recorded = record(p, questionId, answer);
       return "error" in recorded ? { ok: false, error: recorded.error } : { ok: true, ...recorded };
+    },
+    async chooseTeam(token, teamId) {
+      await wait();
+      const p = players.get(tokens.get(token) ?? "");
+      if (!p) return { ok: false, error: "unauthorized" };
+      if (s.phase !== "lobby" || !teams.some((t) => t.id === teamId)) {
+        return { ok: false, error: "round_closed" };
+      }
+      p.teamId = teamId;
+      bump();
+      return { ok: true };
+    },
+    async buzz(token, questionId) {
+      await wait();
+      const p = players.get(tokens.get(token) ?? "");
+      if (!p) return { ok: false, error: "unauthorized" };
+      if (p.kicked) return { ok: false, error: "kicked" };
+      const result = buzzIn(p, questionId);
+      return "error" in result
+        ? { ok: false, error: result.error }
+        : { ok: true, expiresAt: new Date(result.expiresAt).toISOString() };
     },
   };
 

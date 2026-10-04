@@ -26,6 +26,10 @@ const RPC_ERRORS = [
   "kicked",
   "spectator",
   "round_closed",
+  "not_holding",
+  "hold_expired",
+  "held",
+  "team_answered",
 ] as const;
 
 /** RPC exceptions (supabase/migrations) → player errors. */

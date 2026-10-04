@@ -7,7 +7,13 @@ import type { GameMode, LivePlayerAdapter } from "@/engine/live/types";
 import type { LivePublicKey } from "@/engine/transport/signing";
 import { openSupabaseChannel } from "@/engine/transport/supabase";
 
-import { answerLiveAction, joinLiveAction, liveStateAction } from "../live-actions";
+import {
+  answerLiveAction,
+  buzzLiveAction,
+  chooseTeamAction,
+  joinLiveAction,
+  liveStateAction,
+} from "../live-actions";
 
 export function LivePlayClient({
   sessionId,
@@ -25,6 +31,8 @@ export function LivePlayClient({
       join: (nickname) => joinLiveAction(sessionId, nickname),
       state: liveStateAction,
       answer: answerLiveAction,
+      buzz: buzzLiveAction,
+      chooseTeam: chooseTeamAction,
     }),
     [sessionId],
   );

@@ -91,6 +91,17 @@ Satu channel Supabase Realtime per sesi, publik (peserta tidak punya akun Supaba
 - `GET /api/time` mengembalikan jam server. Klien melakukan 5 ping, menghitung `serverNow − (kirim + terima) / 2`, lalu mengambil median dari ping tercepat (`src/engine/transport/clock.ts`).
 - Timer di layar dihitung dari `phase_closes_at` (jam DB) dikurangi jam klien yang sudah dikoreksi.
 
+## Buka serentak
+
+✅ P8-03. Sebelumnya soal baru muncul di HP setelah host memanggil `advance_live('auto')` di akhir countdown dan broadcast `open` tiba (p50 ±0,7 detik, dan berbeda-beda per HP). Sekarang:
+
+1. State `countdown` sudah membawa soal (tanpa kunci jawaban) dan `phaseClosesAt` = waktu buka terjadwal.
+2. Proyektor dan HP menampilkan soal **tepat pada waktu itu menurut jam server** (`openOnTime()`: tahap dianggap `open` dengan tenggat `phaseClosesAt + timeLimitMs`), lalu state `open` asli yang datang kemudian menggantikannya tanpa perubahan tampilan.
+3. Database mengikuti jam yang sama: `open_due_round(session)` membuka putaran **seolah-olah pada waktu terjadwal** (`opened_at = phase_closes_at` countdown, `closes_at = opened_at + batas`). Fungsi ini dipanggil oleh action host sebelum `auto`, atau oleh action jawaban jika jawaban pertama datang saat putaran masih `countdown` (lalu jawaban dicoba sekali lagi dan state baru di-broadcast). Hanya berlaku jika countdown sudah habis dan tidak dijeda, jadi tidak ada yang bisa membuka soal lebih awal.
+4. Hasilnya: semua peserta mulai di detik yang sama, dan poin kecepatan tidak dirugikan oleh terlambatnya panggilan host. Host yang menekan "Buka soal" secara manual sebelum countdown habis tetap membuka saat itu juga.
+
+Engine lokal (`/playground/live`) meniru aturan yang sama. Test: `supabase/tests/live.test.ts` (open_due_round), `src/engine/live/live.test.ts` (openOnTime, jawaban tepat setelah countdown).
+
 ## Laporan
 
 `/quizzes/{id}/live/{sessionId}`: klasemen akhir (skor, benar, ketepatan, rata-rata waktu), replay papan skor per soal, analisis butir soal (sama dengan ujian), dan ekspor CSV (`?kind=standings` / `?kind=items`).

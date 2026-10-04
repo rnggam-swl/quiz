@@ -25,6 +25,12 @@ export async function proxy(request: NextRequest) {
     return secure(NextResponse.next({ request }), frameAncestors(await embedOriginsForSlug(slug)));
   }
 
+  // LTI (P8-08): framed by whichever LMS the teacher registered; the launch itself was
+  // verified by /api/lti/launch, so no session cookies here either.
+  if (pathname.startsWith("/lti/")) {
+    return secure(NextResponse.next({ request }), "frame-ancestors *");
+  }
+
   let env: PublicEnv;
   try {
     env = getPublicEnv();
@@ -48,8 +54,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except static files, images, and the public APIs that need no session: the
-  // clock-sync ping, oEmbed, the token-authenticated REST API and the scheduled jobs.
+  // clock-sync ping, oEmbed, the token-authenticated REST API, the scheduled jobs and the LTI
+  // endpoints the LMS calls.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|api/webhooks|api/maintenance|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|embed\\.js|api/time|api/oembed|api/v1|api/webhooks|api/maintenance|api/lti|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

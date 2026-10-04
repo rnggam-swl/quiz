@@ -17,7 +17,17 @@ import { sampleQuiz } from "../sample";
 const BOT_NAMES = ["Ani", "Budi", "Caca", "Dodi", "Eka", "Fajar", "Gita", "Hana", "Indra", "Joko"];
 
 /** The projector and two phones on one page, over the in-memory engine and hub. */
-export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["mode"] }) {
+export function PlaygroundLive({
+  auto,
+  mode,
+  buzzVariant,
+  teams,
+}: {
+  auto: boolean;
+  mode: LiveForm["mode"];
+  buzzVariant: LiveForm["buzzVariant"];
+  teams: LiveForm["teamAssign"] | null;
+}) {
   const [{ hub, live, title }] = useState(() => {
     const { quiz, questions } = sampleQuiz("all");
     const snapshot = snapshotFromDraft(quiz, questions);
@@ -30,6 +40,10 @@ export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["
         perQuestionS: 20,
         autoAdvance: auto,
         wrongPenalty: mode === "battle_buzzer" ? 100 : 0,
+        buzzVariant,
+        teamsEnabled: teams !== null,
+        teamCount: teams === "choose" ? 3 : 2,
+        teamAssign: teams ?? "auto",
         lives: 2,
         shrinkTimerPct: 20,
         lateJoin: mode === "battle_royale" ? "spectator" : "allow",
@@ -51,7 +65,9 @@ export function PlaygroundLive({ auto, mode }: { auto: boolean; mode: LiveForm["
         <strong>
           Playground{" "}
           {mode === "battle_buzzer"
-            ? "rebutan"
+            ? buzzVariant === "buzz_then_answer"
+              ? "rebutan (pencet lalu jawab)"
+              : "rebutan"
             : mode === "battle_royale"
               ? "battle royale"
               : "live"}

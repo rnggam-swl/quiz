@@ -14,7 +14,7 @@ import {
 import { parseSnapshot } from "@/engine/practice/snapshot";
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { GAME_MODES } from "@/engine/live/types";
+import { GAME_MODES, type TeamStanding } from "@/engine/live/types";
 
 import { all } from "../../exams/data";
 
@@ -38,63 +38,70 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
 
   const battle = session.mode !== "live";
   const royale = session.mode === "battle_royale";
-  const [{ data: version }, participants, rounds, rows, battleRows, winners] = await Promise.all([
-    supabase
-      .from("quiz_versions")
-      .select("snapshot")
-      .eq("id", session.quiz_version_id)
-      .maybeSingle(),
-    all((from, to) =>
+  const [{ data: version }, participants, rounds, rows, battleRows, winners, { data: game }] =
+    await Promise.all([
       supabase
-        .from("participants")
-        .select("id, nickname, kicked_at, is_spectator, lives, eliminated_round, shadow_score")
-        .eq("session_id", sessionId)
-        .order("joined_at")
-        .range(from, to),
-    ),
-    all((from, to) =>
-      supabase
-        .from("battle_rounds")
-        .select("idx, question_id, opened_at")
-        .eq("session_id", sessionId)
-        .order("idx")
-        .range(from, to),
-    ),
-    battle
-      ? Promise.resolve([])
-      : all((from, to) =>
-          supabase
-            .from("responses")
-            .select(
-              "id, question_id, answer, correct, total, points, time_ms, attempts!inner(session_id, participant_id)",
-            )
-            .eq("attempts.session_id", sessionId)
-            .order("id")
-            .range(from, to),
-        ),
-    // Rebutan keeps its answers per round (docs/10).
-    battle
-      ? all((from, to) =>
-          supabase
-            .from("battle_answers")
-            .select(
-              "id, participant_id, answer, correct, points, reaction_ms, shadow, battle_rounds!inner(session_id, question_id)",
-            )
-            .eq("battle_rounds.session_id", sessionId)
-            .order("id")
-            .range(from, to),
-        )
-      : Promise.resolve([]),
-    battle
-      ? all((from, to) =>
-          supabase
-            .from("round_winners")
-            .select("participant_id, battle_rounds!inner(session_id)")
-            .eq("battle_rounds.session_id", sessionId)
-            .range(from, to),
-        )
-      : Promise.resolve([]),
-  ]);
+        .from("quiz_versions")
+        .select("snapshot")
+        .eq("id", session.quiz_version_id)
+        .maybeSingle(),
+      all((from, to) =>
+        supabase
+          .from("participants")
+          .select(
+            "id, nickname, kicked_at, is_spectator, lives, eliminated_round, shadow_score, team_id",
+          )
+          .eq("session_id", sessionId)
+          .order("joined_at")
+          .range(from, to),
+      ),
+      all((from, to) =>
+        supabase
+          .from("battle_rounds")
+          .select("idx, question_id, opened_at")
+          .eq("session_id", sessionId)
+          .order("idx")
+          .range(from, to),
+      ),
+      battle
+        ? Promise.resolve([])
+        : all((from, to) =>
+            supabase
+              .from("responses")
+              .select(
+                "id, question_id, answer, correct, total, points, time_ms, attempts!inner(session_id, participant_id)",
+              )
+              .eq("attempts.session_id", sessionId)
+              .order("id")
+              .range(from, to),
+          ),
+      // Rebutan keeps its answers per round (docs/10).
+      battle
+        ? all((from, to) =>
+            supabase
+              .from("battle_answers")
+              .select(
+                "id, participant_id, answer, correct, points, reaction_ms, shadow, battle_rounds!inner(session_id, question_id)",
+              )
+              .eq("battle_rounds.session_id", sessionId)
+              .order("id")
+              .range(from, to),
+          )
+        : Promise.resolve([]),
+      battle
+        ? all((from, to) =>
+            supabase
+              .from("round_winners")
+              .select("participant_id, battle_rounds!inner(session_id)")
+              .eq("battle_rounds.session_id", sessionId)
+              .range(from, to),
+          )
+        : Promise.resolve([]),
+      // Mode tim (P8-02): the final team board, by the same rules as the projector's.
+      supabase.rpc("live_game_state", { p_session_id: sessionId }),
+    ]);
+  const teams = (game as { teams?: TeamStanding[] } | null)?.teams ?? null;
+  const teamName = new Map(teams?.map((t) => [t.id, t.name]));
   const snapshot = parseSnapshot(version?.snapshot);
   if (!snapshot) notFound();
 
@@ -133,9 +140,14 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
   // Rounds that actually opened, in the order they were played.
   const played = rounds.filter((r) => r.opened_at).map((r) => r.question_id);
 
-  let standings: LiveStandingRow[] = liveStandings(players, responses, played).map((row) =>
-    battle && !royale ? { ...row, wins: wins.get(row.id) ?? 0 } : row,
-  );
+  let standings: LiveStandingRow[] = liveStandings(players, responses, played).map((row) => {
+    const team = teamName.get(byParticipant.get(row.id)?.team_id ?? "");
+    return {
+      ...row,
+      ...(battle && !royale && { wins: wins.get(row.id) ?? 0 }),
+      ...(team && { team }),
+    };
+  });
   if (royale) {
     // Royale ranks by survival, not points (royale_standings, docs/10).
     const { data: ranking } = await supabase.rpc("royale_standings", { p_session_id: sessionId });
@@ -173,6 +185,16 @@ export const buildLiveReport = cache(async (quizId: string, sessionId: string) =
     title: session.quizzes.title || snapshot.quiz.title,
     battle,
     royale,
+    teams:
+      teams?.map((t) => ({
+        id: t.id,
+        slot: t.slot,
+        name: t.name,
+        members: t.members,
+        alive: t.alive,
+        score: t.score,
+        rank: t.rank,
+      })) ?? null,
     standings,
     replay: replay.map((frame) => ({
       ...frame,
@@ -188,6 +210,7 @@ export function standingsCsv(rows: LiveStandingRow[]): string {
     [
       "Peringkat",
       "Nama",
+      "Tim",
       "Skor",
       "Soal dimenangkan",
       "Bertahan sampai putaran",
@@ -201,6 +224,7 @@ export function standingsCsv(rows: LiveStandingRow[]): string {
     ...rows.map((r) => [
       r.rank,
       r.nickname,
+      r.team ?? null,
       r.score,
       r.wins ?? null,
       r.lives === undefined

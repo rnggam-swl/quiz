@@ -221,6 +221,28 @@ answer: {
 
 ---
 
+## Bank soal
+
+✅ P8-12. Setiap soal punya `tags`, dan satu guru memakai satu kosakata tag untuk semua quiznya.
+
+- **Ambil dari bank soal** (di bawah "Tambah soal" di editor, [`QuestionBankDialog.tsx`](../src/components/editor/QuestionBankDialog.tsx)): cari soal dari **quiz-quiz lain milik guru yang sama** berdasarkan teks pertanyaan, tipe, dan tag (bisa beberapa tag sekaligus = harus punya semuanya). Soal yang dipilih **disalin** ke akhir quiz yang sedang diedit dengan ID baru, jadi mengubah salinan tidak mengubah aslinya. Sumbernya adalah draf soal, termasuk quiz yang belum terbit.
+- **Saran tag:** kolom Tag di panel properti menyarankan tag yang sudah dipakai di semua quiz guru (`my_question_tags()`, urut dari yang paling sering), supaya "kelas-8" tidak berubah menjadi "kls 8" di quiz lain.
+- Pencarian memakai query biasa di bawah RLS (hanya quiz milik sendiri) dengan indeks GIN pada `questions.tags` ([`…_question_bank.sql`](../supabase/migrations/20261001500000_question_bank.sql)). Server Action: [`bank-actions.ts`](<../src/app/(dashboard)/quizzes/bank-actions.ts>).
+- **Pool soal ujian** (`policy.questionPool.tags`, [08](08-mode-exam.md)) tetap mengambil dari soal quiz ujian itu sendiri, karena ujian memakai snapshot satu versi quiz. Untuk ujian dari banyak topik: kumpulkan soalnya dulu lewat bank soal ke satu quiz, lalu pakai pool dengan filter tag.
+
+## Generate soal dengan AI
+
+✅ P8-10. Tombol **Buat dengan AI** di editor (hanya muncul jika server punya `ANTHROPIC_API_KEY`).
+
+- **Sumber:** topik, teks yang ditempel (maks. 60.000 karakter), atau PDF (maks. 10 MB, dikirim sebagai dokumen ke model). Guru memilih jumlah soal (5–20), tingkat ("Kelas 5 SD"), dan tipe: Pilihan Ganda, Benar/Salah, Isian Singkat, Angka, Urutkan, Odd One Out.
+- **Model:** Claude Opus 5.5 (`claude-opus-5-5`) lewat `@anthropic-ai/sdk`, effort `medium`, dengan **structured output** dari skema Zod ([`src/lib/ai-questions.ts`](../src/lib/ai-questions.ts)): satu objek datar per soal, sehingga respons selalu JSON yang valid. Server action: [`ai-actions.ts`](<../src/app/(dashboard)/quizzes/ai-actions.ts>). `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) diaktifkan: jika pengaman model menolak permintaan, API menjalankannya ulang di model cadangan yang direkomendasikan Anthropic. `stop_reason: "refusal"` yang tetap terjadi ditampilkan sebagai pesan yang jelas.
+- **Prompt:** Bahasa Indonesia, satu jawaban benar yang tidak ambigu, distraktor masuk akal, fakta hanya dari bahan jika bahan diberikan, dan bahan diperlakukan sebagai data, bukan perintah (dibungkus `<bahan>`).
+- **Wajib ditinjau:** hasilnya tidak langsung disimpan. Dialog menampilkan setiap soal beserta jawabannya dengan kotak centang. Soal yang dipilih masuk ke **draf** dan harus di-publish guru seperti biasa. Soal yang tidak lolos `validateQuestion` (misalnya tanpa kunci atau opsi kurang) dibuang lebih dulu dan jumlahnya disebutkan.
+- **Batas biaya:** maksimal `AI_DAILY_LIMIT` (default 20) generate per guru per 24 jam, dicatat di `ai_generations` beserta jumlah token. Guru hanya bisa menambah baris, tidak bisa menghapus, jadi kuota tidak bisa di-reset. Server action berjalan maksimal 180 detik (`maxDuration` halaman editor).
+- **Privasi:** teks dan PDF dikirim ke API Anthropic hanya untuk permintaan itu, dan dialog memberi tahu guru.
+- Error API dipetakan per kelas SDK (rate limit, autentikasi, bad request/PDF rusak, timeout, koneksi) ke pesan berbahasa Indonesia.
+- `/playground/editor` memakai generator palsu, jadi UI bisa dicoba tanpa kunci API.
+
 ## Impor & ekspor
 
 ✅ P8-13. Tombol spreadsheet di header editor: **Impor dari Excel / CSV**, **Ekspor ke Excel (.xlsx)**, **Ekspor ke CSV**, dan **Unduh template**. Semuanya berjalan di browser ([`src/components/editor/SheetMenu.tsx`](../src/components/editor/SheetMenu.tsx)). Soal hasil impor ditambahkan di akhir draf dan ikut tersimpan lewat autosave seperti editan biasa. Konversi murni ada di [`src/lib/question-sheet.ts`](../src/lib/question-sheet.ts) (diuji bolak-balik untuk semua tipe, termasuk lewat file .xlsx sungguhan).

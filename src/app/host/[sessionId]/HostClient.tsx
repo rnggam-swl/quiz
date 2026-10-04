@@ -11,6 +11,7 @@ import {
   hostLiveStateAction,
   kickParticipantAction,
   liveSettingsAction,
+  shuffleTeamsAction,
 } from "../actions";
 
 export function HostClient({
@@ -28,6 +29,7 @@ export function HostClient({
       advance: (version, action) => advanceLiveAction(sessionId, version, action),
       settings: (patch) => liveSettingsAction(sessionId, patch),
       kick: (participantId) => kickParticipantAction(sessionId, participantId),
+      shuffleTeams: () => shuffleTeamsAction(sessionId),
     }),
     [sessionId],
   );

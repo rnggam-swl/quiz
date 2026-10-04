@@ -42,4 +42,4 @@ Prototipe visual dan interaksi ada di [`spec/reference-html/formulir-builder-qui
 - Target pengguna utama untuk MVP: sekolah/guru, HR/perusahaan, atau penyelenggara event?
 - Model bisnis: gratis dengan batas, langganan per guru, atau lisensi sekolah?
 - Batas peserta per sesi live/battle di MVP (usulan: 200).
-- Apakah perlu integrasi LMS (LTI 1.3, Google Classroom) sejak awal?
+- Integrasi LMS: LTI 1.3 sudah ada ([07 · Embed](07-embed.md#lti-13)). Perlukah Google Classroom juga?

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { CopyField } from "@/components/ui/CopyField";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { requireHost } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -9,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { Section } from "../Section";
 import { CreateApiToken, RevokeToken } from "./ApiTokens";
+import { CreateLtiPlatform, DeleteLtiPlatform } from "./LtiPlatforms";
 import { CreateWebhook, Redeliver, WebhookControls } from "./Webhooks";
 
 export const metadata: Metadata = { title: "Integrasi" };
@@ -38,29 +40,35 @@ export default async function IntegrationsPage() {
   await requireHost("/account/integrations");
   const supabase = await createClient();
   const origin = await requestOrigin();
-  const [{ data: tokens }, { data: webhooks }, { data: deliveries }] = await Promise.all([
-    supabase
-      .from("api_tokens")
-      .select("id, name, prefix, created_at, expires_at, last_used_at, revoked_at")
-      .order("created_at", { ascending: false })
-      .limit(100),
-    supabase
-      .from("webhooks")
-      .select("id, url, description, active, created_at")
-      .order("created_at"),
-    supabase
-      .from("webhook_deliveries")
-      .select(
-        "id, event, status, attempts, response_status, last_error, created_at, next_attempt_at, webhooks!inner(url)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  const [{ data: tokens }, { data: webhooks }, { data: deliveries }, { data: platforms }] =
+    await Promise.all([
+      supabase
+        .from("api_tokens")
+        .select("id, name, prefix, created_at, expires_at, last_used_at, revoked_at")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("webhooks")
+        .select("id, url, description, active, created_at")
+        .order("created_at"),
+      supabase
+        .from("webhook_deliveries")
+        .select(
+          "id, event, status, attempts, response_status, last_error, created_at, next_attempt_at, webhooks!inner(url)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("lti_platforms")
+        .select("id, name, issuer, client_id, deployment_ids, created_at")
+        .order("created_at"),
+    ]);
 
   return (
     <>
       <TokenSection tokens={tokens ?? []} origin={origin} />
       <WebhookSection webhooks={webhooks ?? []} deliveries={deliveries ?? []} />
+      <LtiSection platforms={platforms ?? []} origin={origin} />
     </>
   );
 }
@@ -257,6 +265,74 @@ function WebhookSection({
             </table>
           </div>
         </div>
+      )}
+    </Section>
+  );
+}
+
+function LtiSection({
+  platforms,
+  origin,
+}: {
+  platforms: Pick<
+    Tables<"lti_platforms">,
+    "id" | "name" | "issuer" | "client_id" | "deployment_ids" | "created_at"
+  >[];
+  origin: string;
+}) {
+  const urls = [
+    { label: "Tool URL / Redirect URI", value: `${origin}/api/lti/launch` },
+    { label: "Initiate login URL", value: `${origin}/api/lti/login` },
+    { label: "Public keyset URL (JWKS)", value: `${origin}/api/lti/jwks` },
+    { label: "Deep linking URL", value: `${origin}/api/lti/launch` },
+  ];
+  return (
+    <Section
+      title="LMS (LTI 1.3)"
+      description="Pasang quiz sebagai aktivitas di Moodle, Canvas, atau LMS lain yang mendukung LTI 1.3. Peserta masuk dengan akun LMS-nya, dan nilainya (0–100) masuk ke buku nilai LMS."
+    >
+      <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm text-fg-muted">
+        <li>
+          Di LMS, daftarkan tool eksternal LTI 1.3 dengan URL berikut. Aktifkan{" "}
+          <strong className="font-medium text-fg">Deep Linking</strong> dan layanan nilai{" "}
+          <strong className="font-medium text-fg">(Assignment and Grade Services)</strong>. Kirim
+          nama peserta supaya laporan menampilkan nama asli.
+          <div className="mt-2 grid gap-2">
+            {urls.map((url) => (
+              <div key={url.label} className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-fg">{url.label}</span>
+                <CopyField label={url.label} value={url.value} />
+              </div>
+            ))}
+          </div>
+        </li>
+        <li>Salin detail yang ditampilkan LMS setelah tool disimpan ke formulir di bawah.</li>
+        <li>
+          Tambahkan aktivitas dari tool ini di kelas, lalu pilih quiz. Hanya quiz akun ini yang
+          sudah diterbitkan yang bisa dipilih.
+        </li>
+      </ol>
+
+      <CreateLtiPlatform />
+
+      {platforms.length > 0 && (
+        <ul className="divide-y divide-line rounded-xl border border-line" aria-label="LMS">
+          {platforms.map((platform) => (
+            <li key={platform.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-medium">{platform.name}</span>
+                <span className="truncate text-xs text-fg-subtle">
+                  <span className="font-mono">{platform.issuer}</span> · client{" "}
+                  <span className="font-mono">{platform.client_id}</span>
+                  {platform.deployment_ids.length > 0 &&
+                    ` · deployment ${platform.deployment_ids.join(", ")}`}{" "}
+                  · ditambahkan <LocalTime iso={platform.created_at} options={DATE} />
+                </span>
+              </div>
+              <DeleteLtiPlatform id={platform.id} name={platform.name} />
+            </li>
+          ))}
+        </ul>
       )}
     </Section>
   );

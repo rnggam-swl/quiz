@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_generations: {
+        Row: {
+          created_at: string
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          owner_id: string
+          question_count: number
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          owner_id?: string
+          question_count?: number
+          source: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          owner_id?: string
+          question_count?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generations_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_tokens: {
         Row: {
           created_at: string
@@ -137,6 +178,7 @@ export type Database = {
       battle_answers: {
         Row: {
           answer: Json
+          client_ms: number | null
           correct: boolean
           id: string
           participant_id: string
@@ -148,6 +190,7 @@ export type Database = {
         }
         Insert: {
           answer: Json
+          client_ms?: number | null
           correct: boolean
           id?: string
           participant_id: string
@@ -155,10 +198,11 @@ export type Database = {
           reaction_ms?: number | null
           received_at?: string
           round_id: string
-          shadow: boolean
+          shadow?: boolean
         }
         Update: {
           answer?: Json
+          client_ms?: number | null
           correct?: boolean
           id?: string
           participant_id?: string
@@ -193,9 +237,11 @@ export type Database = {
           locked_at: string | null
           opened_at: string | null
           question_id: string
+          resolve_at: string | null
           session_id: string
           status: Database["public"]["Enums"]["round_status"]
           time_limit_ms: number
+          win_points: number | null
         }
         Insert: {
           closes_at?: string | null
@@ -204,9 +250,11 @@ export type Database = {
           locked_at?: string | null
           opened_at?: string | null
           question_id: string
+          resolve_at?: string | null
           session_id: string
           status?: Database["public"]["Enums"]["round_status"]
           time_limit_ms: number
+          win_points?: number | null
         }
         Update: {
           closes_at?: string | null
@@ -215,9 +263,11 @@ export type Database = {
           locked_at?: string | null
           opened_at?: string | null
           question_id?: string
+          resolve_at?: string | null
           session_id?: string
           status?: Database["public"]["Enums"]["round_status"]
           time_limit_ms?: number
+          win_points?: number | null
         }
         Relationships: [
           {
@@ -225,6 +275,42 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buzzer_holds: {
+        Row: {
+          created_at: string
+          expires_at: string
+          participant_id: string
+          round_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          participant_id: string
+          round_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          participant_id?: string
+          round_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buzzer_holds_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buzzer_holds_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: true
+            referencedRelation: "battle_rounds"
             referencedColumns: ["id"]
           },
         ]
@@ -261,6 +347,166 @@ export type Database = {
           },
         ]
       }
+      lti_keys: {
+        Row: {
+          created_at: string
+          kid: string
+          private_pem: string
+          public_jwk: Json
+        }
+        Insert: {
+          created_at?: string
+          kid: string
+          private_pem: string
+          public_jwk: Json
+        }
+        Update: {
+          created_at?: string
+          kid?: string
+          private_pem?: string
+          public_jwk?: Json
+        }
+        Relationships: []
+      }
+      lti_launches: {
+        Row: {
+          created_at: string
+          deep_link_data: string | null
+          deep_link_return_url: string | null
+          deployment_id: string
+          external_id: string
+          id: string
+          lineitem: string | null
+          lti_user_id: string
+          message_type: string
+          name: string | null
+          platform_id: string
+          quiz_id: string | null
+          resource_link_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          deep_link_data?: string | null
+          deep_link_return_url?: string | null
+          deployment_id: string
+          external_id: string
+          id?: string
+          lineitem?: string | null
+          lti_user_id: string
+          message_type: string
+          name?: string | null
+          platform_id: string
+          quiz_id?: string | null
+          resource_link_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          deep_link_data?: string | null
+          deep_link_return_url?: string | null
+          deployment_id?: string
+          external_id?: string
+          id?: string
+          lineitem?: string | null
+          lti_user_id?: string
+          message_type?: string
+          name?: string | null
+          platform_id?: string
+          quiz_id?: string | null
+          resource_link_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lti_launches_platform_id_fkey"
+            columns: ["platform_id"]
+            isOneToOne: false
+            referencedRelation: "lti_platforms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lti_launches_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lti_platforms: {
+        Row: {
+          auth_login_url: string
+          auth_token_url: string
+          client_id: string
+          created_at: string
+          deployment_ids: string[]
+          id: string
+          issuer: string
+          jwks_url: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          auth_login_url: string
+          auth_token_url: string
+          client_id: string
+          created_at?: string
+          deployment_ids?: string[]
+          id?: string
+          issuer: string
+          jwks_url: string
+          name: string
+          owner_id?: string
+        }
+        Update: {
+          auth_login_url?: string
+          auth_token_url?: string
+          client_id?: string
+          created_at?: string
+          deployment_ids?: string[]
+          id?: string
+          issuer?: string
+          jwks_url?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lti_platforms_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lti_states: {
+        Row: {
+          created_at: string
+          nonce: string
+          platform_id: string
+          state: string
+        }
+        Insert: {
+          created_at?: string
+          nonce: string
+          platform_id: string
+          state: string
+        }
+        Update: {
+          created_at?: string
+          nonce?: string
+          platform_id?: string
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lti_states_platform_id_fkey"
+            columns: ["platform_id"]
+            isOneToOne: false
+            referencedRelation: "lti_platforms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           eliminated_round: number | null
@@ -277,23 +523,25 @@ export type Database = {
           session_id: string
           shadow_score: number
           streak: number
+          team_id: string | null
           user_id: string | null
         }
         Insert: {
-          eliminated_round: number | null
+          eliminated_round?: number | null
           external_id?: string | null
           id?: string
           is_spectator?: boolean
           joined_at?: string
           kicked_at?: string | null
           last_seen_at?: string | null
-          lives: number | null
+          lives?: number | null
           nickname: string
           roster_id?: string | null
           score?: number
           session_id: string
-          shadow_score: number
+          shadow_score?: number
           streak?: number
+          team_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -311,6 +559,7 @@ export type Database = {
           session_id?: string
           shadow_score?: number
           streak?: number
+          team_id?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -326,6 +575,13 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "participants_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -777,6 +1033,35 @@ export type Database = {
           },
         ]
       }
+      teams: {
+        Row: {
+          id: string
+          name: string
+          session_id: string
+          slot: number
+        }
+        Insert: {
+          id?: string
+          name: string
+          session_id: string
+          slot: number
+        }
+        Update: {
+          id?: string
+          name?: string
+          session_id?: string
+          slot?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_deliveries: {
         Row: {
           attempts: number
@@ -943,7 +1228,28 @@ export type Database = {
       api_authenticate: { Args: { p_token_hash: string }; Returns: string }
       api_quiz: { Args: { p_owner: string; p_quiz_id: string }; Returns: Json }
       api_quizzes: { Args: { p_owner: string }; Returns: Json }
+      assign_teams: {
+        Args: { p_force?: boolean; p_session_id: string }
+        Returns: number
+      }
+      buzz_in: {
+        Args: { p_participant_id: string; p_question_id: string }
+        Returns: Json
+      }
+      buzzer_win: {
+        Args: {
+          p_participant: string
+          p_points: number
+          p_round: Database["public"]["Tables"]["battle_rounds"]["Row"]
+          p_session: Database["public"]["Tables"]["sessions"]["Row"]
+        }
+        Returns: undefined
+      }
       call_app: { Args: { p_path: string }; Returns: undefined }
+      choose_team: {
+        Args: { p_participant_id: string; p_team_id: string }
+        Returns: undefined
+      }
       claim_webhook_deliveries: {
         Args: { p_limit?: number }
         Returns: {
@@ -1032,6 +1338,14 @@ export type Database = {
         }
       }
       expire_attempts: { Args: never; Returns: number }
+      expire_buzzer_hold: {
+        Args: {
+          p_hold: Database["public"]["Tables"]["buzzer_holds"]["Row"]
+          p_round: Database["public"]["Tables"]["battle_rounds"]["Row"]
+          p_session: Database["public"]["Tables"]["sessions"]["Row"]
+        }
+        Returns: undefined
+      }
       extend_attempt: {
         Args: { p_attempt_id: string; p_minutes: number }
         Returns: {
@@ -1121,6 +1435,7 @@ export type Database = {
           session_id: string
           shadow_score: number
           streak: number
+          team_id: string | null
           user_id: string | null
         }
         SetofOptions: {
@@ -1147,6 +1462,7 @@ export type Database = {
           session_id: string
           shadow_score: number
           streak: number
+          team_id: string | null
           user_id: string | null
         }
         SetofOptions: {
@@ -1177,6 +1493,7 @@ export type Database = {
           session_id: string
           shadow_score: number
           streak: number
+          team_id: string | null
           user_id: string | null
         }
         SetofOptions: {
@@ -1207,6 +1524,10 @@ export type Database = {
         }[]
       }
       live_finish: { Args: { p_session_id: string }; Returns: undefined }
+      live_game_state: {
+        Args: { p_participant_id?: string; p_session_id: string }
+        Returns: Json
+      }
       live_state: {
         Args: { p_participant_id?: string; p_session_id: string }
         Returns: Json
@@ -1222,6 +1543,51 @@ export type Database = {
         Args: { p_attempt_id: string; p_events: Json }
         Returns: number
       }
+      lti_practice_session: {
+        Args: { p_quiz_id: string }
+        Returns: {
+          auto_advance: boolean
+          closes_at: string | null
+          code: string | null
+          created_at: string
+          current_round: number | null
+          host_id: string
+          id: string
+          is_default: boolean
+          lobby_locked: boolean
+          mode: Database["public"]["Enums"]["session_mode"]
+          opens_at: string | null
+          paused_at: string | null
+          paused_remaining_ms: number | null
+          phase: Database["public"]["Enums"]["live_phase"] | null
+          phase_closes_at: string | null
+          phase_opened_at: string | null
+          policy: Json
+          question_ids: string[] | null
+          quiz_id: string
+          quiz_version_id: string | null
+          results_released_at: string | null
+          seed: number | null
+          state_version: number
+          status: Database["public"]["Enums"]["session_status"]
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      my_question_tags: {
+        Args: never
+        Returns: {
+          tag: string
+          uses: number
+        }[]
+      }
+      open_due_round: { Args: { p_session_id: string }; Returns: boolean }
       orphan_media: {
         Args: { p_limit?: number; p_min_age?: string }
         Returns: {
@@ -1242,6 +1608,7 @@ export type Database = {
       record_battle_answer: {
         Args: {
           p_answer: Json
+          p_client_ms?: number
           p_correct: boolean
           p_participant_id: string
           p_penalty?: number
@@ -1333,6 +1700,29 @@ export type Database = {
         }
       }
       reset_attempt: { Args: { p_attempt_id: string }; Returns: undefined }
+      resolve_buzzer_round: { Args: { p_session_id: string }; Returns: Json }
+      resolve_royale_round: {
+        Args: {
+          p_round: Database["public"]["Tables"]["battle_rounds"]["Row"]
+          p_session: Database["public"]["Tables"]["sessions"]["Row"]
+        }
+        Returns: undefined
+      }
+      round_answers: {
+        Args: {
+          p_round: Database["public"]["Tables"]["battle_rounds"]["Row"]
+          p_session: Database["public"]["Tables"]["sessions"]["Row"]
+        }
+        Returns: {
+          answer: Json
+          correct: number
+          participant_id: string
+          points: number
+          shadow: boolean
+          time_ms: number
+          total: number
+        }[]
+      }
       royale_standings: {
         Args: { p_session_id: string }
         Returns: {
@@ -1358,6 +1748,7 @@ export type Database = {
         Returns: number
       }
       send_test_webhook: { Args: { p_webhook_id: string }; Returns: string }
+      shuffle_teams: { Args: { p_session_id: string }; Returns: undefined }
       start_attempt: {
         Args: {
           p_duration_s?: number
@@ -1422,6 +1813,13 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      team_already_played: {
+        Args: {
+          p_participant: Database["public"]["Tables"]["participants"]["Row"]
+          p_round_id: string
+        }
+        Returns: boolean
       }
       update_live_settings: {
         Args: {

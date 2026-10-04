@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { snapshotFromDraft, type Snapshot } from "@/engine/practice/snapshot";
 import { createMemoryHub } from "@/engine/transport/memory";
@@ -8,7 +8,7 @@ import { createQuestion } from "@/questions/question";
 import { avatarFor } from "./avatar";
 import { DEFAULT_LIVE_FORM, livePolicyFrom, liveQuestionOrder, liveQuestions } from "./form";
 import { createLocalLive } from "./local";
-import { nextStepLabel, timedPhase } from "./phases";
+import { nextStepLabel, openOnTime, timedPhase } from "./phases";
 import { leaderboardReplay, liveStandings } from "./report";
 import { nextStreak, speedPoints, streakBonus } from "./scoring";
 import type { RawLiveState } from "./types";
@@ -275,6 +275,64 @@ describe("local engine", () => {
       error: "round_closed",
     });
   });
+
+  it("opens on time: an answer right after the countdown opens the round (P8-03)", async () => {
+    // Only the clock: the engine's own timers stay real.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const live = createLocalLive(quiz(), policy, { hub: createMemoryHub(), latencyMs: 0 });
+      const ani = await live.player.join("Ani");
+      if (!ani.ok) throw new Error();
+      const host = await live.host.state();
+      if (!host.ok) throw new Error();
+      const cd = await live.host.advance(host.view.version, "next");
+      if (!cd.ok) throw new Error();
+      const q = cd.view.question!;
+      expect(await live.player.answer(ani.token, q.id, { selectedIds: ["a"] })).toMatchObject({
+        error: "round_closed",
+      });
+      // The countdown is over, the host's timer hasn't fired: the answer opens the round.
+      vi.setSystemTime(Date.now() + 3050);
+      expect(await live.player.answer(ani.token, q.id, { selectedIds: ["a"] })).toEqual({
+        ok: true,
+      });
+      const after = await live.host.state();
+      if (!after.ok) throw new Error();
+      expect(after.view.phase).toBe("open");
+      // Opened as of the scheduled moment: the question's deadline counts from there.
+      expect(Date.parse(after.view.phaseClosesAt!)).toBe(
+        Date.parse(cd.view.phaseClosesAt!) + after.view.timeLimitMs!,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("openOnTime (buka serentak)", () => {
+  const countdown = sharedView(
+    raw({ phase: "countdown", phaseClosesAt: "2026-09-29T08:00:03.000Z", timeLimitMs: 20_000 }),
+    quiz(),
+  );
+
+  it("keeps the countdown until the server clock reaches its end", () => {
+    expect(openOnTime(countdown, Date.parse("2026-09-29T08:00:02.900Z"))).toBe(countdown);
+  });
+
+  it("then shows the question with its own deadline", () => {
+    const shown = openOnTime(countdown, Date.parse("2026-09-29T08:00:03.000Z"));
+    expect(shown.phase).toBe("open");
+    expect(shown.phaseClosesAt).toBe("2026-09-29T08:00:23.000Z");
+    expect(shown.question).toBe(countdown.question);
+  });
+
+  it("leaves paused countdowns and other phases alone", () => {
+    const late = Date.parse("2026-09-29T09:00:00Z");
+    const paused = { ...countdown, paused: true };
+    expect(openOnTime(paused, late)).toBe(paused);
+    const open = { ...countdown, phase: "open" as const };
+    expect(openOnTime(open, late)).toBe(open);
+  });
 });
 
 describe("signed shared state", () => {
@@ -329,7 +387,12 @@ describe("rebutan", () => {
       wrongPenalty: 250,
     });
     expect(policy.scoring).toBe("first_correct");
-    expect(policy.buzzer).toEqual({ variant: "first_correct", holdS: 5, wrongPenalty: 250 });
+    expect(policy.buzzer).toEqual({
+      variant: "first_correct",
+      holdS: 5,
+      wrongPenalty: 250,
+      graceMs: 250,
+    });
   });
 
   it("shows a phone its verdict at once (one chance), unlike live", () => {
@@ -372,6 +435,51 @@ describe("rebutan", () => {
     if (!after.ok) throw new Error();
     expect(after.view.phase).toBe("reveal");
     expect(after.view.winner).toMatchObject({ nickname: "Budi" });
+  });
+
+  it("pencet lalu jawab: only the one holding the buzzer answers (P8-01)", async () => {
+    const live = createLocalLive(
+      quiz(),
+      livePolicyFrom({
+        ...DEFAULT_LIVE_FORM,
+        mode: "battle_buzzer",
+        buzzVariant: "buzz_then_answer",
+        wrongPenalty: 100,
+      }),
+      { hub: createMemoryHub(), latencyMs: 0, mode: "battle_buzzer" },
+    );
+    const ani = await live.player.join("Ani");
+    const budi = await live.player.join("Budi");
+    if (!ani.ok || !budi.ok) throw new Error("join failed");
+    let host = await live.host.state();
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    host = await live.host.advance(host.view.version, "next");
+    if (!host.ok) throw new Error();
+    const q = host.view.question!;
+    expect(host.view.buzzVariant).toBe("buzz_then_answer");
+
+    expect(await live.player.answer(ani.token, q.id, { selectedIds: ["a"] })).toMatchObject({
+      error: "not_holding",
+    });
+    expect(await live.player.buzz!(ani.token, q.id)).toMatchObject({ ok: true });
+    expect(await live.player.buzz!(budi.token, q.id)).toMatchObject({ ok: false, error: "held" });
+    const held = await live.host.state();
+    expect(held.ok && held.view.hold).toMatchObject({ nickname: "Ani" });
+
+    // Wrong: Ani is out for this question and the buzzer is free for Budi.
+    expect(await live.player.answer(ani.token, q.id, { selectedIds: ["b"] })).toMatchObject({
+      ok: true,
+      outcome: { won: false },
+    });
+    expect(await live.player.buzz!(ani.token, q.id)).toMatchObject({ error: "already_answered" });
+    expect(await live.player.buzz!(budi.token, q.id)).toMatchObject({ ok: true });
+    expect(await live.player.answer(budi.token, q.id, { selectedIds: ["a"] })).toMatchObject({
+      outcome: { won: true, points: 1000 },
+    });
+    const after = await live.host.state();
+    expect(after.ok && after.view.phase).toBe("reveal");
   });
 });
 
