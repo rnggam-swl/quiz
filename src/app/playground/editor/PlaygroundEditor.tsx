@@ -50,7 +50,7 @@ function createFakeAdapter(): EditorAdapter {
       const kind = mediaKindOf(file.type) ?? "image";
       return { kind, url: URL.createObjectURL(file) };
     },
-    // "Buat dengan AI" without calling Claude: a fixed answer after a pause.
+    // "Buat dengan AI" without calling Gemini: a fixed answer after a pause.
     async generateQuestions(form) {
       await delay(1200);
       const topic = String(form.get("topic") ?? "").trim() || "contoh";

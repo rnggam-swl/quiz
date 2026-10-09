@@ -1,4 +1,8 @@
 allowBuilds:
+  # Gemini SDK ("Buat dengan AI"): its preinstall is a no-op, protobufjs's postinstall only
+  # checks versions.
+  "@google/genai": false
+  protobufjs: false
   sharp: false
   # The CLI binary ships as an optional dependency (@supabase/cli-<platform>); no build step needed.
   supabase: false

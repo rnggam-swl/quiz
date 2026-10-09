@@ -33,10 +33,18 @@ export function getCronSecret(): string | null {
   return secret && secret.length >= 32 ? secret : null;
 }
 
-/** Claude API key for "Buat dengan AI" (P8-10). Optional: without it the feature is hidden. */
-export function getAnthropicKey(): string | null {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
+/** Gemini API key for "Buat dengan AI" (P8-10). Optional: without it the feature is hidden. */
+export function getGeminiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY?.trim();
   return key ? key : null;
+}
+
+/**
+ * The Gemini model for "Buat dengan AI" (GEMINI_MODEL). Google retires models often, so a
+ * replacement can be set without a code change.
+ */
+export function geminiModel(): string {
+  return process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
 }
 
 /** How many AI generations a host may run per 24 hours (AI_DAILY_LIMIT, default 20). */

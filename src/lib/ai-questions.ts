@@ -8,7 +8,7 @@ import { MAX_ODD_ITEMS } from "@/questions/odd-one-out/definition";
 
 // Generate soal dengan AI (P8-10, docs/04-question-types.md#generate-soal-dengan-ai). Pure
 // parts: what the model must return (structured output), the prompt, and the mapping to
-// editor questions. The Claude call itself is in src/app/(dashboard)/quizzes/ai-actions.ts.
+// editor questions. The Gemini call itself is in src/app/(dashboard)/quizzes/ai-actions.ts.
 
 /** Types the model writes well and a teacher can check at a glance. */
 export const AI_TYPES = [
@@ -60,6 +60,31 @@ export const generatedSchema = z.object({
   ),
 });
 export type Generated = z.infer<typeof generatedSchema>;
+
+/**
+ * generatedSchema as the JSON Schema Gemini's structured output takes (responseJsonSchema).
+ * Gemini reads a subset of JSON Schema: no `$schema`, and integers without zod's
+ * safe-integer bounds, which only add noise.
+ */
+export function geminiJsonSchema(schema: z.ZodType = generatedSchema): Record<string, unknown> {
+  const clean = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(clean);
+    if (!node || typeof node !== "object") return node;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "$schema") continue;
+      if (
+        (key === "minimum" || key === "maximum") &&
+        Math.abs(Number(value)) === Number.MAX_SAFE_INTEGER
+      ) {
+        continue;
+      }
+      out[key] = clean(value);
+    }
+    return out;
+  };
+  return clean(z.toJSONSchema(schema)) as Record<string, unknown>;
+}
 export type GeneratedQuestion = Generated["questions"][number];
 
 export type AiRequest = {

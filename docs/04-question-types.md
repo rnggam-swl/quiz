@@ -232,15 +232,16 @@ answer: {
 
 ## Generate soal dengan AI
 
-✅ P8-10. Tombol **Buat dengan AI** di editor (hanya muncul jika server punya `ANTHROPIC_API_KEY`).
+✅ P8-10. Tombol **Buat dengan AI** di editor (hanya muncul jika server punya `GEMINI_API_KEY`).
 
 - **Sumber:** topik, teks yang ditempel (maks. 60.000 karakter), atau PDF (maks. 10 MB, dikirim sebagai dokumen ke model). Guru memilih jumlah soal (5–20), tingkat ("Kelas 5 SD"), dan tipe: Pilihan Ganda, Benar/Salah, Isian Singkat, Angka, Urutkan, Odd One Out.
-- **Model:** Claude Opus 5.5 (`claude-opus-5-5`) lewat `@anthropic-ai/sdk`, effort `medium`, dengan **structured output** dari skema Zod ([`src/lib/ai-questions.ts`](../src/lib/ai-questions.ts)): satu objek datar per soal, sehingga respons selalu JSON yang valid. Server action: [`ai-actions.ts`](<../src/app/(dashboard)/quizzes/ai-actions.ts>). `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) diaktifkan: jika pengaman model menolak permintaan, API menjalankannya ulang di model cadangan yang direkomendasikan Anthropic. `stop_reason: "refusal"` yang tetap terjadi ditampilkan sebagai pesan yang jelas.
+- **Model:** Gemini Flash (`gemini-3.8-flash`, bisa diganti lewat env `GEMINI_MODEL` saat Google memensiunkan model) lewat `@google/genai` (`models.generateContent`, tanpa riwayat yang disimpan di Google), thinking default model. **Structured output:** skema Zod ([`src/lib/ai-questions.ts`](../src/lib/ai-questions.ts)) diubah ke JSON Schema (`geminiJsonSchema`, `responseJsonSchema`), satu objek datar per soal. Jawaban tetap di-parse ulang dengan skema Zod; yang tidak cocok ditampilkan sebagai "tidak bisa dibaca". Server action: [`ai-actions.ts`](<../src/app/(dashboard)/quizzes/ai-actions.ts>). Diblokir pengaman (`SAFETY`, `PROHIBITED_CONTENT`, dll.) atau terpotong (`MAX_TOKENS`) ditampilkan sebagai pesan yang jelas.
 - **Prompt:** Bahasa Indonesia, satu jawaban benar yang tidak ambigu, distraktor masuk akal, fakta hanya dari bahan jika bahan diberikan, dan bahan diperlakukan sebagai data, bukan perintah (dibungkus `<bahan>`).
 - **Wajib ditinjau:** hasilnya tidak langsung disimpan. Dialog menampilkan setiap soal beserta jawabannya dengan kotak centang. Soal yang dipilih masuk ke **draf** dan harus di-publish guru seperti biasa. Soal yang tidak lolos `validateQuestion` (misalnya tanpa kunci atau opsi kurang) dibuang lebih dulu dan jumlahnya disebutkan.
-- **Batas biaya:** maksimal `AI_DAILY_LIMIT` (default 20) generate per guru per 24 jam, dicatat di `ai_generations` beserta jumlah token. Guru hanya bisa menambah baris, tidak bisa menghapus, jadi kuota tidak bisa di-reset. Server action berjalan maksimal 180 detik (`maxDuration` halaman editor).
-- **Privasi:** teks dan PDF dikirim ke API Anthropic hanya untuk permintaan itu, dan dialog memberi tahu guru.
-- Error API dipetakan per kelas SDK (rate limit, autentikasi, bad request/PDF rusak, timeout, koneksi) ke pesan berbahasa Indonesia.
+- **Batas biaya:** maksimal `AI_DAILY_LIMIT` (default 20) generate per guru per 24 jam, dicatat di `ai_generations` beserta jumlah token (output termasuk token thinking). Guru hanya bisa menambah baris, tidak bisa menghapus, jadi kuota tidak bisa di-reset. Server action berjalan maksimal 180 detik (`maxDuration` halaman editor): dua percobaan masing-masing 80 detik.
+- **Privasi:** teks dan PDF dikirim ke Gemini API hanya untuk permintaan itu, dan dialog memberi tahu guru. Pakai kunci dari project dengan **billing aktif** (tier berbayar): di tier gratis, Google boleh memakai input untuk meningkatkan produknya dan peninjau manusia bisa membacanya.
+- **Ketentuan usia Gemini API:** ketentuan Google melarang pemakaian layanan sebagai bagian dari aplikasi yang ditujukan atau kemungkinan diakses pengguna di bawah 18 tahun. Fitur ini hanya untuk guru, tetapi platformnya dipakai murid; periksa ketentuan ini sebelum mengaktifkan `GEMINI_API_KEY` di produksi.
+- Error API dipetakan dari status HTTP `ApiError` (429, 401/403, 400/PDF rusak, lainnya), timeout, dan koneksi ke pesan berbahasa Indonesia.
 - `/playground/editor` memakai generator palsu, jadi UI bisa dicoba tanpa kunci API.
 
 ## Impor & ekspor

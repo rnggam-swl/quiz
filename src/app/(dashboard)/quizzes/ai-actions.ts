@@ -1,7 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { ApiError, FinishReason, GoogleGenAI, type Part } from "@google/genai";
 import { z } from "zod";
 
 import type { AiResult } from "@/components/editor/types";
@@ -9,19 +8,18 @@ import {
   AI_LIMITS,
   AI_TYPES,
   generatedSchema,
+  geminiJsonSchema,
   SYSTEM_PROMPT,
   toDraftQuestions,
   userPrompt,
   type AiRequest,
 } from "@/lib/ai-questions";
-import { aiDailyLimit, getAnthropicKey } from "@/lib/env.server";
+import { aiDailyLimit, geminiModel, getGeminiKey } from "@/lib/env.server";
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 // Generate soal dengan AI (P8-10, docs/04-question-types.md#generate-soal-dengan-ai). The
 // result is a list of drafts the teacher reviews in the editor; nothing is saved here.
-
-const MODEL = "claude-opus-5-5";
 
 const requestSchema = z.object({
   source: z.enum(["topic", "text", "pdf"]),
@@ -32,9 +30,21 @@ const requestSchema = z.object({
   level: z.string().trim().max(60),
 });
 
+/** Gemini's structured output, built once. */
+const RESPONSE_SCHEMA = geminiJsonSchema();
+
+/** Finish reasons that mean the model wouldn't answer this material. */
+const DECLINED = new Set<string>([
+  FinishReason.SAFETY,
+  FinishReason.RECITATION,
+  FinishReason.BLOCKLIST,
+  FinishReason.PROHIBITED_CONTENT,
+  FinishReason.SPII,
+]);
+
 export async function generateQuestionsAction(form: FormData): Promise<AiResult> {
   const user = await requireHost();
-  const apiKey = getAnthropicKey();
+  const apiKey = getGeminiKey();
   if (!apiKey) return { ok: false, error: "Fitur AI belum diaktifkan di server ini." };
 
   const parsed = requestSchema.safeParse({
@@ -80,60 +90,56 @@ export async function generateQuestionsAction(form: FormData): Promise<AiResult>
     };
   }
 
-  const client = new Anthropic({ apiKey, timeout: 170_000, maxRetries: 1 });
-  let message;
+  // Two tries of 80 s fit in the editor page's maxDuration (180 s).
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { timeout: 80_000, retryOptions: { attempts: 2 } },
+  });
+  const model = geminiModel();
+  const parts: Part[] = [
+    ...(pdf ? [{ inlineData: { mimeType: "application/pdf", data: pdf } }] : []),
+    { text: userPrompt(request) },
+  ];
+  let response;
   try {
-    message = await client.beta.messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      // A declined request is re-run on Anthropic's recommended fallback model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: SYSTEM_PROMPT,
-      output_config: { effort: "medium", format: betaZodOutputFormat(generatedSchema) },
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...(pdf
-              ? [
-                  {
-                    type: "document" as const,
-                    source: {
-                      type: "base64" as const,
-                      media_type: "application/pdf" as const,
-                      data: pdf,
-                    },
-                  },
-                ]
-              : []),
-            { type: "text" as const, text: userPrompt(request) },
-          ],
-        },
-      ],
+    response = await ai.models.generateContent({
+      model,
+      contents: [{ role: "user", parts }],
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        responseJsonSchema: RESPONSE_SCHEMA,
+        // Thinking counts towards this too; 20 questions need a few thousand tokens.
+        maxOutputTokens: 24_000,
+      },
     });
   } catch (error) {
     return { ok: false, error: apiError(error) };
   }
 
-  if (message.stop_reason === "refusal") {
+  const finish = response.candidates?.[0]?.finishReason;
+  if (response.promptFeedback?.blockReason || (finish && DECLINED.has(finish))) {
     return {
       ok: false,
       error: "AI menolak membuat soal dari bahan ini. Coba bahan atau topik lain.",
     };
   }
-  if (message.stop_reason === "max_tokens" || !message.parsed_output) {
+  if (finish === FinishReason.MAX_TOKENS) {
     return { ok: false, error: "Jawaban AI terpotong. Coba kurangi jumlah soal." };
   }
+  const output = parseOutput(response.text);
+  if (!output) return { ok: false, error: "Jawaban AI tidak bisa dibaca. Coba lagi." };
 
-  const { questions, dropped } = toDraftQuestions(message.parsed_output, request.types);
+  const { questions, dropped } = toDraftQuestions(output, request.types);
+  const usage = response.usageMetadata;
   await supabase.from("ai_generations").insert({
     owner_id: user.id,
     source: request.source,
-    model: message.model,
+    model: response.modelVersion ?? model,
     question_count: questions.length,
-    input_tokens: message.usage.input_tokens,
-    output_tokens: message.usage.output_tokens,
+    input_tokens: usage?.promptTokenCount ?? null,
+    // Thinking is billed as output.
+    output_tokens: (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
   });
   if (questions.length === 0) {
     return { ok: false, error: "AI tidak menghasilkan soal yang bisa dipakai. Coba lagi." };
@@ -141,29 +147,34 @@ export async function generateQuestionsAction(form: FormData): Promise<AiResult>
   return { ok: true, questions, dropped, remaining: Math.max(0, limit - (used ?? 0) - 1) };
 }
 
+/** The JSON Gemini returned, checked against the schema it was asked to follow. */
+function parseOutput(text: string | undefined) {
+  if (!text) return null;
+  try {
+    const result = generatedSchema.safeParse(JSON.parse(text));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
 function apiError(error: unknown): string {
-  if (error instanceof Anthropic.RateLimitError) {
-    return "AI sedang sibuk. Tunggu sebentar lalu coba lagi.";
-  }
-  if (
-    error instanceof Anthropic.AuthenticationError ||
-    error instanceof Anthropic.PermissionDeniedError
-  ) {
-    return "Kunci API AI di server tidak valid. Hubungi admin.";
-  }
-  if (error instanceof Anthropic.BadRequestError) {
-    return "Bahan tidak bisa diproses (PDF rusak, terkunci, atau terlalu banyak halaman).";
-  }
-  if (error instanceof Anthropic.APIConnectionTimeoutError) {
-    return "AI terlalu lama menjawab. Coba kurangi jumlah soal.";
-  }
-  if (error instanceof Anthropic.APIConnectionError) {
-    return "Tidak bisa menghubungi layanan AI. Coba lagi.";
-  }
-  if (error instanceof Anthropic.APIError) {
+  if (error instanceof ApiError) {
+    if (error.status === 429) return "AI sedang sibuk. Tunggu sebentar lalu coba lagi.";
+    if (error.status === 401 || error.status === 403) {
+      return "Kunci API AI di server tidak valid. Hubungi admin.";
+    }
+    if (error.status === 400) {
+      return "Bahan tidak bisa diproses (PDF rusak, terkunci, atau terlalu banyak halaman).";
+    }
     console.error("AI generation failed", error.status, error.message);
     return "Layanan AI sedang bermasalah. Coba lagi nanti.";
   }
+  // The SDK aborts a try that runs past httpOptions.timeout.
+  if (error instanceof Error && error.name === "AbortError") {
+    return "AI terlalu lama menjawab. Coba kurangi jumlah soal.";
+  }
+  if (error instanceof TypeError) return "Tidak bisa menghubungi layanan AI. Coba lagi.";
   console.error("AI generation failed", error);
   return "Terjadi kesalahan. Coba lagi.";
 }

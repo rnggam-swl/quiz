@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AI_TYPES,
+  geminiJsonSchema,
   toDraftQuestions,
   userPrompt,
   type AiRequest,
@@ -118,5 +120,31 @@ describe("userPrompt", () => {
     expect(text).toContain("<bahan>\nAir menguap…\n</bahan>");
     expect(userPrompt({ ...base, source: "pdf", topic: "bab 2" })).toContain("dokumen PDF");
     expect(userPrompt({ ...base, level: " " })).toContain("tingkat: umum");
+  });
+});
+
+describe("geminiJsonSchema", () => {
+  it("is plain JSON Schema Gemini accepts: no $schema, no safe-integer noise", () => {
+    const schema = geminiJsonSchema();
+    const text = JSON.stringify(schema);
+    expect(text).not.toContain("$schema");
+    expect(text).not.toContain(String(Number.MAX_SAFE_INTEGER));
+    expect(schema).toMatchObject({ type: "object", required: ["questions"] });
+
+    const question = (schema.properties as { questions: { items: Record<string, unknown> } })
+      .questions.items;
+    expect(question).toMatchObject({
+      type: "object",
+      properties: {
+        type: { type: "string", enum: [...AI_TYPES] },
+        correct_options: { type: "array", items: { type: "integer" } },
+        is_true: { type: "boolean" },
+      },
+    });
+    // Every field is always present, so the model can't skip one.
+    expect((question.required as string[]).sort()).toEqual(
+      Object.keys(question.properties as object).sort(),
+    );
+    expect(text).toContain("Nomor opsi yang benar, mulai dari 1.");
   });
 });

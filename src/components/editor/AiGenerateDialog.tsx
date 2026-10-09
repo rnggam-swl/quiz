@@ -282,7 +282,7 @@ function AiGenerator({
       </fieldset>
       {source !== "topic" && (
         <p className="text-xs text-fg-subtle">
-          Bahan dikirim ke layanan AI (Anthropic) hanya untuk menyusun soal ini.
+          Bahan dikirim ke layanan AI (Google Gemini) hanya untuk menyusun soal ini.
         </p>
       )}
       {error && (

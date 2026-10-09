@@ -21,7 +21,7 @@
 
 ## Konten
 
-- [x] **P8-10** Generate soal dengan AI dari topik, teks, atau PDF. Hasilnya berupa draft yang wajib ditinjau guru sebelum dipakai. _(Claude Opus 5.5 + structured output; butuh `ANTHROPIC_API_KEY`; lihat [docs/04](../../docs/04-question-types.md#generate-soal-dengan-ai).)_
+- [x] **P8-10** Generate soal dengan AI dari topik, teks, atau PDF. Hasilnya berupa draft yang wajib ditinjau guru sebelum dipakai. _(Gemini Flash + structured output; butuh `GEMINI_API_KEY`; lihat [docs/04](../../docs/04-question-types.md#generate-soal-dengan-ai).)_
 - [x] **P8-11** Library quiz publik: visibilitas `public`, pencarian, duplikat ke akun sendiri. _(`/library`, **Bagikan → Library**, `copy_library_quiz`; lihat [docs/01](../../docs/01-product.md#library).)_
 - [x] **P8-12** Bank soal lintas quiz (tag global). _(Dialog "Ambil dari bank soal" + saran tag; lihat [docs/04](../../docs/04-question-types.md#bank-soal).)_
 - [x] **P8-13** Impor soal dari CSV/XLSX, dan ekspor. _(Menu spreadsheet di editor; lihat [docs/04](../../docs/04-question-types.md#impor--ekspor).)_

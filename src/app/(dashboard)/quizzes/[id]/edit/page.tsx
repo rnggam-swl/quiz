@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { requireHost } from "@/lib/auth";
-import { getAnthropicKey } from "@/lib/env.server";
+import { getGeminiKey } from "@/lib/env.server";
 import { toEditorState } from "@/lib/quiz-data";
 import { createClient } from "@/lib/supabase/server";
 
@@ -41,7 +41,7 @@ export default async function EditQuizPage({ params }: PageProps<"/quizzes/[id]/
     <EditorPage
       initial={toEditorState(quiz, questions)}
       ownerId={user.id}
-      aiEnabled={getAnthropicKey() !== null}
+      aiEnabled={getGeminiKey() !== null}
     />
   );
 }
