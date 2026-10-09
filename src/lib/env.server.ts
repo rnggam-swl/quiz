@@ -49,7 +49,9 @@ export function geminiModels(): string[] {
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
-  return models.length ? [...new Set(models)] : ["gemini-3.8-flash", "gemini-3.7-flash"];
+  // 3.5 Flash answered in seconds while 3.8 Flash kept returning 503 "high demand" (2026-10);
+  // Flash-Lite is slower but held up.
+  return models.length ? [...new Set(models)] : ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
 }
 
 /** How many AI generations a host may run per 24 hours (AI_DAILY_LIMIT, default 20). */
