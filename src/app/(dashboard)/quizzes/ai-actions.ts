@@ -1,6 +1,12 @@
 "use server";
 
-import { ApiError, FinishReason, GoogleGenAI, type Part } from "@google/genai";
+import {
+  ApiError,
+  FinishReason,
+  GoogleGenAI,
+  type GenerateContentResponse,
+  type Part,
+} from "@google/genai";
 import { z } from "zod";
 
 import type { AiResult } from "@/components/editor/types";
@@ -14,7 +20,7 @@ import {
   userPrompt,
   type AiRequest,
 } from "@/lib/ai-questions";
-import { aiDailyLimit, geminiModel, getGeminiKey } from "@/lib/env.server";
+import { aiDailyLimit, geminiModels, getGeminiKey } from "@/lib/env.server";
 import { requireHost } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,6 +38,16 @@ const requestSchema = z.object({
 
 /** Gemini's structured output, built once. */
 const RESPONSE_SCHEMA = geminiJsonSchema();
+
+/**
+ * "Too busy, try another": overloaded (503), out of this model's quota (429, quotas are per
+ * model), or failing on Google's side (500, 504). The next model in GEMINI_MODEL gets a go.
+ */
+const TRY_NEXT_MODEL = new Set([429, 500, 503, 504]);
+
+/** The editor page allows 180 s; stop trying models in time to answer. */
+const BUDGET_MS = 165_000;
+const ATTEMPT_MS = 55_000;
 
 /** Finish reasons that mean the model wouldn't answer this material. */
 const DECLINED = new Set<string>([
@@ -90,32 +106,47 @@ export async function generateQuestionsAction(form: FormData): Promise<AiResult>
     };
   }
 
-  // Two tries of 80 s fit in the editor page's maxDuration (180 s).
-  const ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: { timeout: 80_000, retryOptions: { attempts: 2 } },
-  });
-  const model = geminiModel();
+  const ai = new GoogleGenAI({ apiKey });
   const parts: Part[] = [
     ...(pdf ? [{ inlineData: { mimeType: "application/pdf", data: pdf } }] : []),
     { text: userPrompt(request) },
   ];
-  let response;
-  try {
-    response = await ai.models.generateContent({
-      model,
-      contents: [{ role: "user", parts }],
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        responseJsonSchema: RESPONSE_SCHEMA,
-        // Thinking counts towards this too; 20 questions need a few thousand tokens.
-        maxOutputTokens: 24_000,
-      },
-    });
-  } catch (error) {
-    return { ok: false, error: apiError(error) };
+  const models = geminiModels();
+  const started = Date.now();
+  let response: GenerateContentResponse | null = null;
+  let model = models[0]!;
+  for (const [i, candidate] of models.entries()) {
+    model = candidate;
+    const left = BUDGET_MS - (Date.now() - started);
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents: [{ role: "user", parts }],
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          responseJsonSchema: RESPONSE_SCHEMA,
+          // Thinking counts towards this too; 20 questions need a few thousand tokens.
+          maxOutputTokens: 24_000,
+          // The first model gets one retry; a fallback is already the retry.
+          httpOptions: {
+            timeout: Math.min(ATTEMPT_MS, left),
+            retryOptions: { attempts: i === 0 ? 2 : 1 },
+          },
+        },
+      });
+      break;
+    } catch (error) {
+      const busy = error instanceof ApiError && TRY_NEXT_MODEL.has(error.status);
+      const next = models[i + 1];
+      if (busy && next && BUDGET_MS - (Date.now() - started) > 30_000) {
+        console.warn(`AI generation: ${model} answered ${error.status}, trying ${next}`);
+        continue;
+      }
+      return { ok: false, error: apiError(error) };
+    }
   }
+  if (!response) return { ok: false, error: "Layanan AI sedang bermasalah. Coba lagi nanti." };
 
   const finish = response.candidates?.[0]?.finishReason;
   if (response.promptFeedback?.blockReason || (finish && DECLINED.has(finish))) {
@@ -160,15 +191,21 @@ function parseOutput(text: string | undefined) {
 
 function apiError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 429) return "AI sedang sibuk. Tunggu sebentar lalu coba lagi.";
+    // Google's own message (no key in it) says what went wrong; keep it in the logs.
+    console.error("AI generation failed", error.status, error.message);
+    if (error.status === 503) {
+      return "Model AI sedang ramai dipakai (kode 503). Coba lagi beberapa menit lagi.";
+    }
+    if (error.status === 429) {
+      return "Kuota AI sedang habis atau terlalu banyak permintaan (kode 429). Coba lagi nanti.";
+    }
     if (error.status === 401 || error.status === 403) {
       return "Kunci API AI di server tidak valid. Hubungi admin.";
     }
     if (error.status === 400) {
       return "Bahan tidak bisa diproses (PDF rusak, terkunci, atau terlalu banyak halaman).";
     }
-    console.error("AI generation failed", error.status, error.message);
-    return "Layanan AI sedang bermasalah. Coba lagi nanti.";
+    return `Layanan AI sedang bermasalah (kode ${error.status}). Coba lagi nanti.`;
   }
   // The SDK aborts a try that runs past httpOptions.timeout.
   if (error instanceof Error && error.name === "AbortError") {

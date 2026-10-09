@@ -40,11 +40,16 @@ export function getGeminiKey(): string | null {
 }
 
 /**
- * The Gemini model for "Buat dengan AI" (GEMINI_MODEL). Google retires models often, so a
- * replacement can be set without a code change.
+ * The Gemini models for "Buat dengan AI", in order (GEMINI_MODEL, comma-separated): the first,
+ * then the next when it's overloaded. Google retires models often, so they can be changed
+ * without a code change.
  */
-export function geminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+export function geminiModels(): string[] {
+  const models = (process.env.GEMINI_MODEL ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return models.length ? [...new Set(models)] : ["gemini-3.8-flash", "gemini-3.7-flash"];
 }
 
 /** How many AI generations a host may run per 24 hours (AI_DAILY_LIMIT, default 20). */
