@@ -15,14 +15,15 @@ Platform untuk membuat dan memainkan quiz yang **clean dan intuitif saat dibuat,
 
 ## Mode
 
-| Mode                      | Ringkasan                                                                    | Dokumen                   |
-| ------------------------- | ---------------------------------------------------------------------------- | ------------------------- |
-| **Latihan**               | Mandiri, kapan saja, lewat link atau kode. Feedback dan gamifikasi opsional. | [06](06-mode-practice.md) |
-| **Embed**                 | Mode latihan (atau ujian ringan) di dalam iframe situs lain                  | [07](07-embed.md)         |
-| **Ujian**                 | Individu, terjadwal, timer dari server, soal diacak, tanpa feedback          | [08](08-mode-exam.md)     |
-| **Live**                  | Host memandu soal satu per satu, poin berdasarkan kecepatan, leaderboard     | [09](09-mode-live.md)     |
-| **Battle: Rebutan**       | Yang tercepat menjawab benar mendapat poin, lalu soal terkunci               | [10](10-mode-battle.md)   |
-| **Battle: Battle Royale** | Salah atau telat berarti kehilangan nyawa, sampai tersisa satu pemenang      | [10](10-mode-battle.md)   |
+| Mode                        | Ringkasan                                                                                                | Dokumen                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **Latihan**                 | Mandiri, kapan saja, lewat link atau kode. Feedback dan gamifikasi opsional.                             | [06](06-mode-practice.md) |
+| **Embed**                   | Mode latihan (atau ujian ringan) di dalam iframe situs lain                                              | [07](07-embed.md)         |
+| **Ujian**                   | Individu, terjadwal, timer dari server, soal diacak, tanpa feedback                                      | [08](08-mode-exam.md)     |
+| **Live**                    | Host memandu soal satu per satu, poin berdasarkan kecepatan, leaderboard                                 | [09](09-mode-live.md)     |
+| **Battle: Rebutan**         | Yang tercepat menjawab benar mendapat poin, lalu soal terkunci                                           | [10](10-mode-battle.md)   |
+| **Battle: Battle Royale**   | Salah atau telat berarti kehilangan nyawa, sampai tersisa satu pemenang                                  | [10](10-mode-battle.md)   |
+| **Papan Soal** (rencana P9) | Peserta atau tim bergiliran memilih soal dari papan; jawaban salah bisa direbut peserta lain atau hangus | [11](11-mode-board.md)    |
 
 ## Pembeda
 

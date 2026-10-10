@@ -12,6 +12,7 @@ profiles 1─* quizzes 1─* questions
                 │                        │ 1─* battle_rounds 1─* battle_answers
                 │                        │                   1─1 round_winners
                 │                        │                   1─1 buzzer_holds
+                │                        │ 1─1 board_state, 1─* board_tiles   (📋 P9 papan soal)
                                           attempts 1─* integrity_events
 ```
 
@@ -20,10 +21,13 @@ profiles 1─* quizzes 1─* questions
 ```sql
 create type quiz_visibility as enum ('private', 'unlisted', 'public');
 create type session_mode    as enum ('practice', 'exam', 'live', 'battle_buzzer', 'battle_royale');
+-- 📋 P9: + 'board' (papan soal, docs/11)
 create type session_status  as enum ('draft', 'scheduled', 'lobby', 'running', 'paused', 'ended');
 create type attempt_status  as enum ('in_progress', 'submitted', 'expired');
 create type round_status    as enum ('pending', 'countdown', 'open', 'resolving', 'locked', 'revealed');
 create type live_phase      as enum ('lobby', 'countdown', 'open', 'reveal', 'leaderboard', 'podium', 'ended');  -- P5
+-- 📋 P9: + 'pick', 'pass', 'buzz' (papan soal)
+create type board_tile_status as enum ('open', 'won', 'burned', 'missed');  -- 📋 P9
 ```
 
 ## Konten
@@ -256,6 +260,51 @@ create table buzzer_holds (              -- ✅ P8-01 rebutan varian "pencet lal
 );
 ```
 
+## Papan soal
+
+📋 Rencana P9 ([11 · Mode Papan Soal](11-mode-board.md)). Putaran dan percobaan memakai `battle_rounds`/`battle_answers` di atas: satu putaran setiap kali sebuah soal dimainkan (`idx` = urutan main), satu baris `battle_answers` per percobaan (penjawab pertama dan para perebut). `buzzer_holds` dipakai ulang untuk tahap `buzz`.
+
+```sql
+create table board_state (               -- satu baris per sesi papan
+  session_id     uuid primary key references sessions on delete cascade,
+  turn_order     uuid[] not null,        -- unit: id peserta (individu) atau id tim
+  turn_idx       int  not null default 0,
+  owner_unit     uuid,                   -- pemilik giliran
+  picker_unit    uuid,                   -- yang memilih soal (pemilik, atau penjawab benar terakhir)
+  answerer_unit  uuid,                   -- yang sedang menjawab
+  last_winner    uuid,                   -- untuk policy.board.picker = 'last_winner'
+  steals_used    int  not null default 0 -- perebut di soal yang sedang dimainkan
+);
+
+create table board_tiles (               -- satu baris per soal di papan
+  session_id     uuid not null references sessions on delete cascade,
+  question_id    uuid not null,
+  position       int  not null,          -- urutan di papan
+  category       text,                   -- default: tag pertama soal
+  points         int  not null check (points between -10000 and 10000),
+  time_limit_ms  int  not null,
+  on_wrong       text not null check (on_wrong in ('steal', 'burn')),
+  status         board_tile_status not null default 'open',
+  closed_by      text check (closed_by in ('rule', 'host')),  -- hangus karena aturan atau host
+  winner_unit    uuid,
+  last_round     uuid references battle_rounds,
+  primary key (session_id, question_id)
+);
+
+create table board_adjustments (         -- koreksi skor oleh host
+  id          uuid primary key default gen_random_uuid(),
+  session_id  uuid not null references sessions on delete cascade,
+  unit        uuid not null,             -- id peserta atau id tim
+  delta       int  not null check (delta <> 0),
+  note        text not null default '',
+  created_at  timestamptz not null default now()
+);
+
+alter table battle_answers
+  add column source text not null default 'player'
+  check (source in ('player', 'timeout', 'host'));   -- host = nilai manual Benar/Salah
+```
+
 ## Akun & integrasi
 
 ```sql
@@ -387,6 +436,27 @@ type Policy = {
     suddenDeath: boolean;
   };
   teams: { enabled: boolean; count: number; assign: "auto" | "choose" }; // P8-02, 2–5 tim
+  // 📋 P9 papan soal (docs/11)
+  board?: {
+    turnOrder: "join" | "random";
+    picker: "owner" | "last_winner";
+    onWrong: "steal" | "burn"; // aturan sesi; per soal di tiles
+    steal: "next" | "buzz";
+    maxPlayers: number; // individu: batas yang ikut giliran, 0 = tanpa batas; tim memakai teams.count
+    maxSteals: number; // 0 = sampai semua unit mencoba
+    showWrongAnswers: boolean;
+    pickS: number; // 0 = tanpa batas
+    buzzS: number;
+    defaultPoints: number; // boleh negatif
+    wrongPenalty: number;
+    tiles: {
+      questionId: string;
+      category?: string;
+      points?: number;
+      timeS?: number;
+      onWrong?: "steal" | "burn";
+    }[];
+  };
 };
 ```
 
@@ -440,3 +510,5 @@ type Policy = {
 | `live_game_state(session, participant?)` ✅                           | host (RLS) / `service_role`            | `live_state` + siapa yang memegang buzzer                                                                                                                                         |
 | `assign_teams(session, force)` / `shuffle_teams(session)` ✅          | host (pemilik) / `service_role`        | Mode tim (P8-02): masuk ke tim terkecil (saat bergabung jika otomatis; semua sisanya saat mulai); acak ulang merata di lobby                                                      |
 | `choose_team(participant, team)` ✅                                   | `service_role`                         | Mode tim "peserta memilih": pilih tim di lobby                                                                                                                                    |
+| `board_pick` / `record_board_answer` / `board_buzz_in` 📋 P9          | `service_role`                         | Papan soal: pilih soal, catat percobaan dan terapkan aturan salah, BUZZ perebut ([11 · RPC](11-mode-board.md#rpc))                                                                |
+| `board_host(session, version, action, question?)` 📋 P9               | host (pemilik)                         | Papan soal: lewati giliran, hanguskan, buka lagi, nilai manual, koreksi skor, ikut/menonton di lobby                                                                              |
