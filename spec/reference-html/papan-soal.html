@@ -1,0 +1,1236 @@
+<!doctype html>
+<!-- Prototipe mode Papan Soal (docs/11-mode-board.md). Referensi visual dan interaksi saja, bukan kode untuk diimpor. -->
+<html lang="id"><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Papan Soal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+<style>
+:root{
+  --canvas:#f8fafc;--surface:#ffffff;--surface-muted:#f1f5f9;--line:#e2e8f0;--line-strong:#cbd5e1;
+  --fg:#111827;--fg-muted:#475569;--fg-subtle:#64748b;--fg-placeholder:#94a3b8;
+  --accent:#2563eb;--accent-hover:#1d4fd1;--accent-fg:#2563eb;--accent-soft:rgb(37 99 235 / .1);--on-accent:#ffffff;
+  --success:#15803d;--success-soft:rgb(22 163 74 / .12);--warning:#b45309;--warning-soft:rgb(245 158 11 / .14);--danger:#dc2626;--danger-soft:rgb(220 38 38 / .1);
+  --answer-1:#ce2c31;--answer-2:#2f6feb;--answer-3:#f5a524;--answer-4:#0b7a6d;--answer-5:#8e4ec6;
+  --on-answer-1:#ffffff;--on-answer-2:#ffffff;--on-answer-3:#1a1a24;--on-answer-4:#ffffff;--on-answer-5:#ffffff;
+  --theme-primary:#4f5bea;--on-theme:#ffffff;--theme-bg:#f0f0f5;
+  --shadow-card:0 1px 3px rgb(15 23 42 / .06);--shadow-pop:0 8px 24px rgb(15 23 42 / .14);
+  --phone-frame:#1e293b;
+  /* Layar proyektor selalu gelap (docs/05: proyektor default latar gelap) */
+  --pj-bg:#0b0f19;--pj-surface:#131a2a;--pj-surface-2:#1b2438;--pj-line:#2a3550;--pj-fg:#eef1f7;--pj-muted:#a3adbf;--pj-gold:#f5b53d;--pj-good:#4ade80;--pj-bad:#f87171;
+  --font-sans:"DM Sans",ui-sans-serif,system-ui,sans-serif;--font-mono:"DM Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --canvas:#0b0f19;--surface:#111827;--surface-muted:#1f2937;--line:#243044;--line-strong:#374151;
+    --fg:#e5e7eb;--fg-muted:#9ca3af;--fg-subtle:#8b95a5;--fg-placeholder:#6b7280;
+    --accent-fg:#60a5fa;--accent-soft:rgb(96 165 250 / .15);
+    --success:#4ade80;--success-soft:rgb(74 222 128 / .14);--warning:#fbbf24;--warning-soft:rgb(251 191 36 / .14);--danger:#f87171;--danger-soft:rgb(248 113 113 / .14);
+    --theme-bg:#0b0f19;--shadow-card:0 1px 3px rgb(0 0 0 / .4);--shadow-pop:0 8px 24px rgb(0 0 0 / .5);
+    --phone-frame:#374151;--pj-bg:#05070d;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --canvas:#0b0f19;--surface:#111827;--surface-muted:#1f2937;--line:#243044;--line-strong:#374151;
+  --fg:#e5e7eb;--fg-muted:#9ca3af;--fg-subtle:#8b95a5;--fg-placeholder:#6b7280;
+  --accent-fg:#60a5fa;--accent-soft:rgb(96 165 250 / .15);
+  --success:#4ade80;--success-soft:rgb(74 222 128 / .14);--warning:#fbbf24;--warning-soft:rgb(251 191 36 / .14);--danger:#f87171;--danger-soft:rgb(248 113 113 / .14);
+  --theme-bg:#0b0f19;--shadow-card:0 1px 3px rgb(0 0 0 / .4);--shadow-pop:0 8px 24px rgb(0 0 0 / .5);
+  --phone-frame:#374151;--pj-bg:#05070d;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--canvas);color:var(--fg);font:14px/1.5 var(--font-sans);padding-inline:16px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1380px;margin:0 auto}
+h1,h2,h3{text-wrap:balance;margin:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--font-mono)}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--canvas) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin-inline:-16px;padding:10px 16px}
+.topbar .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;margin-right:auto}
+.logo{display:grid;grid-template-columns:repeat(3,7px);gap:2px}
+.logo i{width:7px;height:7px;border-radius:2px;background:var(--theme-primary)}
+.logo i:nth-child(2),.logo i:nth-child(6){background:var(--answer-3)}
+.logo i:nth-child(4){background:var(--line-strong)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--warning);background:var(--warning-soft);padding:2px 8px;border-radius:999px}
+.tabs{display:flex;gap:4px;padding:3px;background:var(--surface-muted);border:1px solid var(--line);border-radius:10px}
+.tabs button{border:0;background:none;padding:6px 14px;border-radius:7px;font-weight:600;color:var(--fg-muted);cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-card)}
+.tabs button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- buttons & inputs (editor) ---------- */
+.btn{font-weight:600;border-radius:8px;padding:7px 14px;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center}
+.btn:hover{background:var(--surface-muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.good{background:var(--success-soft);border-color:color-mix(in srgb,var(--success) 45%,var(--line));color:var(--success)}
+.btn.bad{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 45%,var(--line));color:var(--danger)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--accent-fg)}
+.btn.ghost:hover{background:var(--accent-soft)}
+.btn.sm{min-height:30px;padding:4px 10px;font-size:12.5px}
+.btn.icon{min-width:32px;min-height:32px;padding:0 6px;font-size:15px;line-height:1}
+.btn.armed{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.block{width:100%}
+
+input[type=text],input[type=number],select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px;min-height:36px;width:100%}
+textarea{resize:vertical;min-height:60px}
+input::placeholder,textarea::placeholder{color:var(--fg-placeholder)}
+label{font-weight:500}
+
+/* ---------- setup ---------- */
+.intro{padding-block:28px 18px;display:grid;gap:6px;max-width:760px}
+.intro h1{font-size:28px;letter-spacing:-.01em}
+.intro p{margin:0;color:var(--fg-muted);font-size:15px}
+.setup-grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);padding-bottom:96px}
+@media (min-width:980px){.setup-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}}
+.setup-right{display:grid;gap:16px;align-content:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--shadow-card);display:grid;gap:14px;align-content:start;min-width:0}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.panel h2{font-size:16px}
+.panel-head small{color:var(--fg-subtle);font-size:12.5px}
+.sgroup{display:grid;gap:14px;padding-top:14px;border-top:1px solid var(--line)}
+.sgroup:first-child{padding-top:0;border-top:0}
+.sgroup h3{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-subtle);font-weight:600}
+.field{border:0;margin:0;padding:0;display:grid;gap:6px;min-width:0}
+.field legend,.field>label{font-weight:600;font-size:13px;padding:0}
+.field legend{margin-bottom:6px}
+.help{margin:0;color:var(--fg-subtle);font-size:12.5px}
+.seg{display:flex;flex-wrap:wrap;gap:3px;padding:3px;background:var(--surface-muted);border-radius:10px;border:1px solid var(--line)}
+.seg label{flex:1 1 auto;position:relative;font-weight:500}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;text-align:center;padding:6px 10px;border-radius:7px;color:var(--fg-muted);cursor:pointer;white-space:nowrap}
+.seg input:checked+span{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-card);font-weight:600}
+.seg input:focus-visible+span{outline:2px solid var(--accent)}
+.nums{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.numwrap{display:flex;align-items:center;gap:8px}
+.numwrap input{max-width:110px;font-variant-numeric:tabular-nums}
+.numwrap span{color:var(--fg-subtle);font-size:12.5px}
+
+.roster{display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.prow.team{grid-template-columns:auto minmax(0,.9fr) minmax(0,1.3fr) auto}
+.badge{--pc:#64748b;--pfg:#fff;display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:7px;background:var(--pc);color:var(--pfg);font:600 12px/1 var(--font-mono);flex:none}
+
+.qlist{display:grid;gap:8px}
+.qcard{border:1px solid var(--line);border-radius:10px;background:var(--surface);min-width:0}
+.qcard[open]{border-color:var(--line-strong);box-shadow:var(--shadow-card)}
+.qcard summary{list-style:none;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;cursor:pointer;border-radius:10px}
+.qcard summary::-webkit-details-marker{display:none}
+.qcard summary:hover{background:var(--surface-muted)}
+.qnum{font:500 12px var(--font-mono);color:var(--fg-subtle)}
+.qsum{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.qmeta{font-size:12px;color:var(--fg-subtle);white-space:nowrap;font-variant-numeric:tabular-nums}
+.qbody{display:grid;gap:12px;padding:4px 12px 14px;border-top:1px solid var(--line)}
+.qgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));padding-top:10px}
+.qgrid label,.qfull{display:grid;gap:4px;font-size:12.5px;color:var(--fg-muted)}
+.opts{display:grid;gap:6px}
+.opt{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.opt input[type=radio]{width:18px;height:18px;accent-color:var(--success);margin:0}
+.shape-chip{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--c);color:var(--on);font-size:13px}
+.tfrow{display:flex;gap:16px;flex-wrap:wrap}
+.tfrow label{display:flex;gap:6px;align-items:center}
+.qactions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.warn{margin:0;font-size:12.5px;color:var(--warning);background:var(--warning-soft);padding:8px 10px;border-radius:8px}
+.note{margin:0;font-size:12.5px;color:var(--fg-subtle)}
+
+.startbar{position:sticky;bottom:0;margin-inline:-16px;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--canvas) 90%,transparent);backdrop-filter:blur(8px);border-top:1px solid var(--line);z-index:10}
+.startbar .wrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#errors{margin-right:auto;color:var(--danger);font-size:13px;min-width:0}
+#errors ul{margin:0;padding-left:18px}
+
+/* ---------- game layout ---------- */
+.game{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);padding-block:16px 32px}
+@media (min-width:1100px){.game{grid-template-columns:minmax(0,1fr) 370px}}
+.side{display:grid;gap:16px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+@media (min-width:1100px){.side{grid-template-columns:minmax(0,1fr)}}
+.frame-label{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-subtle);font-weight:600;margin:0 0 6px 2px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+
+/* ---------- projector ---------- */
+.pj-frame{container-type:inline-size;min-width:0}
+.pj{background:var(--pj-bg);color:var(--pj-fg);border-radius:16px;padding:clamp(14px,2.4cqi,30px);display:flex;flex-direction:column;gap:clamp(12px,1.8cqi,20px);min-height:clamp(420px,58cqi,720px);box-shadow:var(--shadow-pop);color-scheme:dark;border:1px solid #1c2436}
+.pj-head{display:flex;align-items:center;gap:14px}
+.pj-banner{flex:1;min-width:0}
+.pj-banner .b-main{font-size:clamp(18px,2.8cqi,32px);font-weight:600;line-height:1.2;text-wrap:balance}
+.pj-banner .b-main b{font-weight:700;color:#fff}
+.pj-banner .b-sub{color:var(--pj-muted);font-size:clamp(12px,1.5cqi,16px);margin-top:4px}
+.pj-banner.good .b-main{color:var(--pj-good)}
+.pj-banner.bad .b-main{color:var(--pj-bad)}
+.stage-chip{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--pj-muted);border:1px solid var(--pj-line);padding:3px 9px;border-radius:999px;display:inline-block;margin-bottom:6px}
+.pj-timer{position:relative;width:clamp(56px,8cqi,88px);aspect-ratio:1;flex:none;max-width:100%}
+.pj-timer svg{width:100%;height:100%;transform:rotate(-90deg)}
+.pj-timer .trk{fill:none;stroke:var(--pj-line);stroke-width:4}
+.pj-timer .arc{fill:none;stroke:var(--pj-good);stroke-width:4;stroke-linecap:round;transition:stroke .2s}
+.pj-timer.warn .arc{stroke:var(--pj-gold)}
+.pj-timer.crit .arc{stroke:var(--pj-bad)}
+.pj-timer span{position:absolute;inset:0;display:grid;place-items:center;font:600 clamp(18px,2.6cqi,30px)/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.pj-timer.paused span{font-size:clamp(11px,1.3cqi,14px);letter-spacing:.06em;text-transform:uppercase;font-family:var(--font-sans)}
+.pj-body{flex:1;display:flex;flex-direction:column;min-height:0}
+
+.board{display:grid;gap:clamp(6px,1cqi,12px);flex:1}
+.board.cols{grid-template-columns:repeat(var(--cols),minmax(0,1fr));align-items:start}
+.board.flat{grid-template-columns:repeat(auto-fill,minmax(clamp(96px,15cqi,170px),1fr));align-content:start}
+.bcol{display:grid;gap:clamp(6px,1cqi,12px)}
+.bcol h4{margin:0;text-align:center;font-size:clamp(11px,1.5cqi,16px);letter-spacing:.06em;text-transform:uppercase;color:var(--pj-muted);font-weight:600;padding-bottom:4px;border-bottom:2px solid var(--pj-line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{--tc:var(--pj-surface-2);--tf:var(--pj-fg);border-radius:12px;background:var(--tc);color:var(--tf);border:1px solid var(--pj-line);min-height:clamp(64px,9.5cqi,112px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative;padding:8px;text-align:center;overflow:hidden}
+.tile .t-n{position:absolute;top:6px;left:9px;font:500 clamp(10px,1.2cqi,13px) var(--font-mono);opacity:.7}
+.tile .t-ty{position:absolute;top:6px;right:9px;font-size:clamp(9px,1.1cqi,12px);font-weight:600;opacity:.7;letter-spacing:.03em}
+.tile .t-pts{font:700 clamp(20px,3.6cqi,44px)/1 var(--font-sans);color:var(--pj-gold);font-variant-numeric:tabular-nums}
+.tile .t-pts.neg{color:var(--pj-bad)}
+.tile .t-cat{font-size:clamp(10px,1.2cqi,13px);color:var(--pj-muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.won{border-color:transparent}
+.tile.won .t-who{font-weight:700;font-size:clamp(13px,1.8cqi,20px);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.won .t-small{font:600 clamp(11px,1.3cqi,14px) var(--font-mono);opacity:.85}
+.tile.closed{background:repeating-linear-gradient(-45deg,transparent 0 8px,rgb(255 255 255 / .03) 8px 16px);border-style:dashed;color:var(--pj-muted)}
+.tile.closed .t-lbl{font-weight:600;font-size:clamp(12px,1.5cqi,16px)}
+
+.pj-q{display:flex;flex-direction:column;gap:clamp(12px,1.8cqi,20px);animation:fadeUp .2s ease both}
+.pj-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:clamp(11px,1.3cqi,14px)}
+.pj-meta span{padding:3px 10px;border-radius:999px;background:var(--pj-surface-2);color:var(--pj-muted);border:1px solid var(--pj-line)}
+.pj-meta .m-pts{color:var(--pj-gold);font-weight:600}
+.pj-qtext{font-size:clamp(22px,3.5cqi,42px);font-weight:600;line-height:1.2;text-wrap:balance;margin:0}
+.pj-opts{display:grid;gap:clamp(8px,1.2cqi,14px);grid-template-columns:repeat(2,minmax(0,1fr))}
+.pj-opt{background:var(--c);color:var(--on);border-radius:12px;padding:clamp(10px,1.6cqi,18px) clamp(12px,1.8cqi,20px);display:flex;gap:12px;align-items:center;font-weight:600;font-size:clamp(15px,2.1cqi,24px);transition:opacity .2s;position:relative}
+.pj-opt .shape{font-size:.85em;opacity:.9}
+.pj-opt.is-struck{opacity:.3}
+.pj-opt.is-struck span:not(.shape){text-decoration:line-through}
+.pj-opt.is-dim{opacity:.25}
+.pj-opt.is-correct{outline:3px solid #fff;outline-offset:2px;animation:pop .4s ease}
+.pj-opt .ok{margin-left:auto;font-size:1.1em}
+.pj-hint{border:1px dashed var(--pj-line);border-radius:12px;padding:clamp(14px,2cqi,24px);color:var(--pj-muted);font-size:clamp(14px,1.8cqi,20px);text-align:center}
+.pj-key{border-radius:12px;padding:clamp(14px,2cqi,24px);background:color-mix(in srgb,var(--pj-good) 14%,transparent);border:1px solid color-mix(in srgb,var(--pj-good) 40%,transparent);font-size:clamp(16px,2.2cqi,26px);animation:pop .4s ease}
+.pj-key b{color:#fff}
+.atts{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.att{display:flex;align-items:center;gap:8px;padding:5px 10px 5px 6px;border-radius:999px;background:var(--pj-surface-2);border:1px solid var(--pj-line);font-size:clamp(12px,1.4cqi,15px)}
+.att .att-a{color:var(--pj-muted)}
+.att.no .att-r{color:var(--pj-bad);font-weight:700}
+.att.ok .att-r{color:var(--pj-good);font-weight:700}
+
+.pj-score{display:flex;flex-wrap:wrap;gap:8px;border-top:1px solid var(--pj-line);padding-top:clamp(10px,1.4cqi,16px)}
+.chip{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:12px;background:var(--pj-surface);border:1px solid var(--pj-line);position:relative;min-width:0;transition:opacity .2s}
+.chip .c-name{display:grid;line-height:1.2;min-width:0;font-weight:600;font-size:clamp(12px,1.4cqi,15px)}
+.chip .c-name small{font-weight:400;color:var(--pj-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.chip .c-score{font:600 clamp(13px,1.6cqi,17px) var(--font-mono);font-variant-numeric:tabular-nums;margin-left:4px}
+.chip.is-turn{border-color:var(--pj-gold)}
+.chip .c-turn{position:absolute;top:-8px;left:10px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;background:var(--pj-gold);color:#1a1a24;padding:1px 6px;border-radius:999px}
+.chip.is-actor{background:var(--pj-surface-2);box-shadow:0 0 0 2px #fff inset}
+.chip.is-out{opacity:.45}
+.chip.is-out .c-name{text-decoration:line-through}
+
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:clamp(8px,1.6cqi,18px);padding-top:8px;flex-wrap:wrap}
+.pod{display:grid;justify-items:center;gap:6px;width:clamp(90px,17cqi,190px)}
+.pod .p-name{font-weight:700;font-size:clamp(14px,2cqi,22px);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod .p-score{font:600 clamp(13px,1.7cqi,18px) var(--font-mono);color:var(--pj-gold)}
+.pod .step{width:100%;border-radius:10px 10px 0 0;background:var(--pj-surface-2);border:1px solid var(--pj-line);display:grid;place-items:center;font:700 clamp(22px,3.4cqi,40px) var(--font-sans);color:var(--pj-muted);animation:rise .6s ease both}
+.pod-1 .step{height:clamp(90px,15cqi,170px);background:color-mix(in srgb,var(--pj-gold) 22%,var(--pj-surface-2));color:var(--pj-gold)}
+.pod-2 .step{height:clamp(66px,11cqi,125px)}
+.pod-3 .step{height:clamp(48px,8cqi,95px)}
+.rest{list-style:none;margin:14px auto 0;padding:0;display:grid;gap:6px;width:min(420px,100%)}
+.rest li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:10px;background:var(--pj-surface)}
+.rest .r-n{font:500 13px var(--font-mono);color:var(--pj-muted);width:22px}
+.rest .r-s{margin-left:auto;font:600 14px var(--font-mono)}
+.pj-stats{text-align:center;color:var(--pj-muted);margin-top:14px;font-size:clamp(12px,1.4cqi,15px)}
+
+/* ---------- phone ---------- */
+.phone-top{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.phone-top label{font-size:12.5px;color:var(--fg-subtle);white-space:nowrap}
+.phone-top select{min-height:32px;padding:4px 8px;font-size:13px}
+.phone{width:100%;max-width:360px;margin:0 auto;border:10px solid var(--phone-frame);border-radius:30px;background:var(--theme-bg);min-height:520px;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-pop)}
+.ph-status{display:flex;align-items:center;gap:8px;padding:10px 14px 8px;font-weight:600;font-size:13px}
+.ph-status .ph-score{margin-left:auto;font:600 13px var(--font-mono);color:var(--fg-muted)}
+.ph-timer{height:5px;background:color-mix(in srgb,var(--fg) 8%,transparent);margin:0 14px;border-radius:99px;overflow:hidden}
+.ph-timer i{display:block;height:100%;width:100%;background:var(--success);border-radius:99px;transform-origin:left;transition:background .2s}
+.ph-timer.warn i{background:var(--answer-3)}
+.ph-timer.crit i{background:var(--danger)}
+.ph-body{flex:1;display:flex;flex-direction:column;gap:12px;padding:16px 14px 18px;animation:fadeUp .2s ease both}
+.ph-body.center{justify-content:center;align-items:center;text-align:center}
+.ph-kicker{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-subtle);font-weight:600;margin:0}
+.ph-title{font-size:20px;font-weight:700;line-height:1.25;margin:0}
+.ph-text{margin:0;color:var(--fg-muted)}
+.ph-q{font-size:16px;font-weight:600;line-height:1.35;margin:0}
+.picklist{display:grid;gap:8px}
+.pick-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;padding:10px 12px;border-radius:14px;background:var(--surface);border:1px solid var(--line);cursor:pointer;min-height:56px;box-shadow:0 3px 0 0 var(--line-strong);transition:transform .08s,box-shadow .08s}
+.pick-row:hover{border-color:var(--theme-primary)}
+.pick-row:active{transform:translateY(2px);box-shadow:0 1px 0 0 var(--line-strong)}
+.pick-row .pr-n{font:500 12px var(--font-mono);color:var(--fg-subtle)}
+.pick-row .pr-main{display:grid;min-width:0}
+.pick-row .pr-main b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-row .pr-main small{color:var(--fg-subtle);font-size:12px}
+.pick-row .pr-pts{font:700 18px var(--font-sans);color:var(--theme-primary);font-variant-numeric:tabular-nums}
+.pick-row .pr-pts.neg{color:var(--danger)}
+.b3d{--c:var(--theme-primary);--on:var(--on-theme);border-radius:14px;padding:12px 14px;font-weight:700;font-size:15px;background:var(--c);color:var(--on);border:2px solid color-mix(in srgb,var(--c) 65%,white);box-shadow:0 4px 0 0 color-mix(in srgb,var(--c) 78%,black);min-height:56px;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:left;transition:transform .08s ease,box-shadow .08s ease;width:100%}
+.b3d:active:not(:disabled){transform:translateY(3px) scale(.98);box-shadow:0 1px 0 0 color-mix(in srgb,var(--c) 78%,black)}
+.b3d:disabled{opacity:.3;cursor:not-allowed}
+.b3d:disabled span:not(.shape){text-decoration:line-through}
+.b3d.pill{border-radius:999px;justify-content:center;text-align:center}
+.optgrid{display:grid;gap:10px}
+.ph-form{display:grid;gap:10px}
+.ph-form input{min-height:48px;font-size:17px;border-radius:12px}
+.ph-err{color:var(--danger);font-size:12.5px;margin:0}
+.buzz{--c:var(--answer-1);width:min(190px,70%);aspect-ratio:1;border-radius:50%;border:4px solid color-mix(in srgb,var(--c) 60%,white);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 70%,white),var(--c) 60%);color:#fff;font:800 28px var(--font-sans);letter-spacing:.06em;box-shadow:0 8px 0 0 color-mix(in srgb,var(--c) 70%,black);cursor:pointer;transition:transform .08s,box-shadow .08s}
+.buzz:active{transform:translateY(6px);box-shadow:0 2px 0 0 color-mix(in srgb,var(--c) 70%,black)}
+.buzzgrid{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.buzzgrid .b3d{flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:84px;gap:4px}
+.buzzgrid .b3d small{font:500 11px var(--font-mono);opacity:.85}
+.big-mark{font-size:54px;line-height:1;font-weight:800}
+.big-mark.good{color:var(--success);animation:pop .4s ease}
+.big-mark.bad{color:var(--danger);animation:shake .3s ease}
+.big-pts{font:700 28px var(--font-mono)}
+
+/* ---------- host ---------- */
+.host{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);display:grid;min-width:0}
+.host>*{padding:14px 16px}
+.host>*+*{border-top:1px solid var(--line)}
+.host-head{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.host-head h3{font-size:14px}
+.host-main{display:grid;gap:10px}
+.host-main p{margin:0;color:var(--fg-muted);font-size:13px}
+.keybox{background:var(--success-soft);border:1px solid color-mix(in srgb,var(--success) 35%,var(--line));border-radius:8px;padding:8px 10px;font-size:13px}
+.keybox span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--success);font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.host details summary{cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.host details summary::-webkit-details-marker{display:none}
+.host details summary::after{content:"+";color:var(--fg-subtle);font-weight:400;font-size:16px}
+.host details[open] summary::after{content:"−"}
+.hq{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:4px;max-height:300px;overflow:auto}
+.hq li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px;border-radius:8px;font-size:12.5px}
+.hq li:nth-child(odd){background:var(--surface-muted)}
+.hq .h-n{font:500 12px var(--font-mono);color:var(--fg-subtle)}
+.hq .h-main{display:grid;min-width:0}
+.hq .h-main b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hq .h-st{font-size:11.5px;color:var(--fg-subtle)}
+.hq .h-st.won{color:var(--success)}
+.hq .h-st.closed{color:var(--danger)}
+.hq .h-st.cur{color:var(--accent-fg);font-weight:600}
+.log{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:4px;max-height:240px;overflow:auto;font-size:12.5px}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:8px;color:var(--fg-muted)}
+.log time{font:500 11.5px var(--font-mono);color:var(--fg-subtle);padding-top:1px}
+.log li.good{color:var(--success)}
+.log li.bad{color:var(--danger)}
+.host-foot{display:flex;gap:8px;flex-wrap:wrap}
+.kbd{font:500 11.5px var(--font-mono);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--surface-muted)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.9)}60%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes rise{from{transform:scaleY(.2);transform-origin:bottom}to{transform:scaleY(1);transform-origin:bottom}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>Papan Soal <span class="tag">Prototipe konsep</span></div>
+    <nav class="tabs" aria-label="Tampilan">
+      <button type="button" data-act="nav-setup" id="tab-setup">Atur</button>
+      <button type="button" data-act="nav-game" id="tab-game">Main</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <main id="view-setup">
+    <div class="intro">
+      <h1>Papan Soal</h1>
+      <p>Peserta bergantian memilih soal dari papan lalu menjawabnya. Soal yang dijawab benar tertutup. Kalau jawabannya salah, soal bisa direbut peserta lain atau langsung hangus. Semua aturan di bawah bisa diubah, lalu dicoba langsung di tab Main.</p>
+    </div>
+    <div class="setup-grid">
+      <section class="panel" aria-labelledby="h-rules"><h2 id="h-rules">Aturan main</h2><div id="settings"></div></section>
+      <div class="setup-right">
+        <section class="panel" aria-labelledby="roster-title">
+          <div class="panel-head"><h2 id="roster-title">Peserta</h2><small>Urutan daftar = urutan giliran. Angka = tombol buzz di keyboard.</small></div>
+          <div id="roster"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-q">
+          <div class="panel-head"><h2 id="h-q">Soal</h2><small id="q-count"></small></div>
+          <div id="questions"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <main id="view-game" hidden>
+    <div class="game">
+      <div>
+        <p class="frame-label"><span>Layar proyektor</span></p>
+        <div class="pj-frame"><div class="pj" id="projector"></div></div>
+      </div>
+      <div class="side">
+        <div>
+          <p class="frame-label"><span>Layar HP peserta</span></p>
+          <div class="phone-top"><label for="viewas">Lihat sebagai</label><select id="viewas"></select></div>
+          <div class="phone" id="phone"></div>
+        </div>
+        <div>
+          <p class="frame-label"><span>Layar host</span></p>
+          <section class="host" id="host"></section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="startbar" id="startbar">
+  <div class="wrap">
+    <div id="errors" role="alert"></div>
+    <button type="button" class="btn ghost" data-act="reset-sample" id="btn-reset">Pakai contoh awal</button>
+    <button type="button" class="btn" data-act="nav-game" id="btn-resume" hidden>Kembali ke permainan</button>
+    <button type="button" class="btn primary" data-act="start" id="btn-start">Mulai sesi</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+const SHAPES = ['▲','◆','●','■','★'];
+const PLAYER_COLORS = [['#ce2c31','#fff'],['#2f6feb','#fff'],['#f5a524','#1a1a24'],['#0b7a6d','#fff'],['#8e4ec6','#fff'],['#c2410c','#fff'],['#0e7490','#fff'],['#be185d','#fff']];
+const TYPES = { mc:'Pilihan Ganda', tf:'Benar / Salah', short:'Isian Singkat', number:'Angka', oral:'Lisan' };
+const TYPE_SHORT = { mc:'PG', tf:'B/S', short:'Isian', number:'Angka', oral:'Lisan' };
+const LIVE_LATER = ['Matching','Slider','Odd One Out','Sequencing','Grouping','Guess the Blank','Hotspot'];
+const NOT_LIVE = ['Branching Story','Esai'];
+const MAX_PLAYERS = 8;
+const KEY = 'papan-soal-config-v1';
+const NUM_LIMITS = { maxSteals:[0,20], answerS:[3,300], pickS:[0,300], buzzS:[1,60], defaultPoints:[-10000,10000], penalty:[0,10000] };
+
+function sampleConfig() {
+  const q = (o) => Object.assign({ id: uid(), type:'mc', category:'', text:'', options:['','','',''], correct:0, accepted:'', value:'', tolerance:0, key:'', points:'', timeS:'', onWrong:'inherit' }, o);
+  return {
+    v: 1,
+    format:'individual', order:'list', picker:'self',
+    onWrong:'steal', stealMode:'next', maxSteals:0, showPrevWrong:'yes',
+    answerS:10, pickS:10, buzzS:5, defaultPoints:100, penalty:0,
+    individuals: ['Andi','Bunga','Citra','Dimas'].map(n => ({ id: uid(), name: n, members:'' })),
+    teams: [['Tim Merah','Andi, Bunga'],['Tim Biru','Citra, Dimas'],['Tim Hijau','Eka, Fajar']].map(([n,m]) => ({ id: uid(), name: n, members: m })),
+    questions: [
+      q({ type:'tf', category:'Sains', points:100, text:'Di permukaan laut, air mendidih pada suhu 100 °C.', correct:true }),
+      q({ type:'mc', category:'Sains', points:200, text:'Planet terbesar di tata surya adalah…', options:['Mars','Jupiter','Saturnus','Neptunus'], correct:1 }),
+      q({ type:'short', category:'Sains', points:300, text:'Gas yang paling banyak terkandung di atmosfer Bumi adalah…', accepted:'nitrogen, n2' }),
+      q({ type:'mc', category:'Geografi', points:100, text:'Ibu kota Provinsi Sulawesi Selatan adalah…', options:['Manado','Makassar','Palu','Kendari'], correct:1 }),
+      q({ type:'short', category:'Geografi', points:200, text:'Danau vulkanik terbesar di Indonesia adalah Danau…', accepted:'toba, danau toba' }),
+      q({ type:'number', category:'Geografi', points:300, text:'Ada berapa provinsi di Indonesia pada tahun 2024?', value:38, tolerance:0 }),
+      q({ type:'tf', category:'Sejarah', points:100, text:'Proklamasi kemerdekaan Indonesia dibacakan pada 17 Agustus 1945.', correct:true, onWrong:'burn' }),
+      q({ type:'mc', category:'Sejarah', points:200, text:'Candi Borobudur dibangun pada masa Dinasti…', options:['Syailendra','Sanjaya','Majapahit','Mataram Islam'], correct:0, onWrong:'burn' }),
+      q({ type:'oral', category:'Sejarah', points:300, timeS:20, text:'Sebutkan tiga ikrar Sumpah Pemuda secara singkat.', key:'Satu tanah air, satu bangsa, dan menjunjung bahasa persatuan: Indonesia.' }),
+    ],
+  };
+}
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const c = JSON.parse(raw); if (c && c.v === 1 && Array.isArray(c.questions)) return c; }
+  } catch (e) { /* storage unavailable */ }
+  return sampleConfig();
+}
+function saveConfig() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* ignore */ } }
+
+let cfg = loadConfig();
+let game = null;
+let view = 'setup';
+let viewAs = 'auto';
+let paused = false;
+const openQ = new Set();
+
+const roster = () => cfg.format === 'team' ? cfg.teams : cfg.individuals;
+const unitWord = (fmt = cfg.format) => fmt === 'team' ? 'tim' : 'peserta';
+const ptsText = n => (n < 0 ? '−' : '') + Math.abs(n);
+const fmtDelta = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
+const cfgPoints = q => (q.points === '' || q.points == null || isNaN(q.points)) ? cfg.defaultPoints : Number(q.points);
+const cfgRule = q => q.onWrong === 'inherit' ? cfg.onWrong : q.onWrong;
+const splitAccepted = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+
+/* =================== SETUP =================== */
+function seg(key, label, options, help) {
+  return `<fieldset class="field"><legend>${label}</legend><div class="seg">${options.map(([v, l]) =>
+    `<label><input type="radio" name="cfg-${key}" id="cfg-${key}-${v}" data-cfg="${key}" value="${v}" ${String(cfg[key]) === String(v) ? 'checked' : ''}><span>${l}</span></label>`
+  ).join('')}</div>${help ? `<p class="help">${help}</p>` : ''}</fieldset>`;
+}
+function num(key, label, suffix, help) {
+  const [min, max] = NUM_LIMITS[key];
+  return `<div class="field"><label for="cfg-${key}">${label}</label><div class="numwrap"><input type="number" id="cfg-${key}" data-cfg="${key}" min="${min}" max="${max}" step="1" value="${cfg[key]}">${suffix ? `<span>${suffix}</span>` : ''}</div>${help ? `<p class="help">${help}</p>` : ''}</div>`;
+}
+function settingsHTML() {
+  const L = unitWord();
+  return `
+  <div class="sgroup"><h3>Peserta dan giliran</h3>
+    ${seg('format', 'Format', [['individual','Individu'],['team','Tim']], 'Pilih salah satu. Di mode tim, satu perwakilan menjawab dan menekan buzz untuk timnya.')}
+    ${seg('order', 'Urutan giliran', [['list','Sesuai daftar'],['random','Acak saat mulai']])}
+    ${seg('picker', 'Yang memilih soal', [['self','Pemilik giliran'],['winner','Penjawab benar sebelumnya']], `Pemilik giliran memilih soalnya sendiri. Kalau diatur ke penjawab benar, ${L} yang terakhir menjawab benar memilihkan soal untuk giliran berikutnya. Kalau soal sebelumnya tidak terjawab, pemilik giliran memilih sendiri.`)}
+  </div>
+  <div class="sgroup"><h3>Kalau jawaban salah</h3>
+    ${seg('onWrong', 'Aturan sesi', [['steal','Boleh direbut'],['burn','Soal hangus']], 'Berlaku untuk semua soal, kecuali soal yang punya aturan sendiri. Host tetap bisa menghanguskan soal kapan saja.')}
+    ${seg('stealMode', 'Cara merebut', [['next','Giliran berikutnya'],['buzz','Rebutan (buzz)']], `Giliran berikutnya: soal dilempar ke ${L} berikutnya sesuai urutan. Rebutan: yang paling cepat menekan BUZZ yang menjawab.`)}
+    ${num('maxSteals', 'Maks. perebut per soal', 'kali', `0 = sampai semua ${L} sudah mencoba.`)}
+    ${seg('showPrevWrong', 'Jawaban salah sebelumnya', [['yes','Tampilkan'],['no','Sembunyikan']], 'Kalau ditampilkan, opsi yang sudah dijawab salah dicoret untuk perebut.')}
+  </div>
+  <div class="sgroup"><h3>Waktu</h3><div class="nums">
+    ${num('answerS', 'Menjawab', 'detik', 'Bisa diubah per soal.')}
+    ${num('pickS', 'Memilih soal', 'detik', '0 = tanpa batas. Kalau habis, soal dipilih acak.')}
+    ${num('buzzS', 'Jendela buzz', 'detik', 'Kalau tidak ada yang buzz, soal ditutup.')}
+  </div></div>
+  <div class="sgroup"><h3>Poin</h3><div class="nums">
+    ${num('defaultPoints', 'Poin default', 'poin', 'Untuk soal yang poinnya dikosongkan. Boleh negatif, misalnya -100.')}
+    ${num('penalty', 'Penalti salah', 'poin', 'Dikurangi setiap kali jawaban salah atau waktu habis.')}
+  </div></div>`;
+}
+
+function rosterHTML() {
+  const list = roster(), team = cfg.format === 'team';
+  const noun = team ? 'Tim' : 'Peserta';
+  return `<div class="roster">${list.map((p, i) => {
+    const [c, f] = PLAYER_COLORS[i % PLAYER_COLORS.length];
+    return `<div class="prow ${team ? 'team' : ''}">
+      <span class="badge" style="--pc:${c};--pfg:${f}">${i + 1}</span>
+      <input type="text" id="p-name-${p.id}" data-p="${p.id}" data-pf="name" value="${esc(p.name)}" aria-label="Nama ${noun.toLowerCase()} ${i + 1}" maxlength="24">
+      ${team ? `<input type="text" id="p-mem-${p.id}" data-p="${p.id}" data-pf="members" value="${esc(p.members)}" placeholder="Anggota, pisahkan dengan koma" aria-label="Anggota ${esc(p.name)}">` : ''}
+      <button type="button" class="btn icon" data-act="p-del" data-id="${p.id}" aria-label="Hapus ${esc(p.name)}" ${list.length <= 2 ? 'disabled' : ''}>×</button>
+    </div>`;
+  }).join('')}</div>
+  <div><button type="button" class="btn ghost sm" data-act="p-add" ${list.length >= MAX_PLAYERS ? 'disabled' : ''}>+ Tambah ${noun.toLowerCase()}</button></div>`;
+}
+
+function typeSelect(q) {
+  return `<select id="q-type-${q.id}" data-q="${q.id}" data-f="type">
+    <optgroup label="Bisa dipakai di mode ini">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${q.type === k ? 'selected' : ''}>${v}${k === 'oral' ? ' (dinilai host, usulan baru)' : ''}</option>`).join('')}</optgroup>
+    <optgroup label="Bisa live, belum ada di prototipe">${LIVE_LATER.map(n => `<option disabled>${n}</option>`).join('')}</optgroup>
+    <optgroup label="Tidak untuk mode live">${NOT_LIVE.map(n => `<option disabled>${n}</option>`).join('')}</optgroup>
+  </select>`;
+}
+function qMeta(q) {
+  const pts = cfgPoints(q);
+  return `${q.category ? esc(q.category) + ' · ' : ''}${TYPE_SHORT[q.type]} · ${ptsText(pts)}${q.points === '' ? '*' : ''}`;
+}
+function qCard(q, i) {
+  const ruleLabel = cfg.onWrong === 'burn' ? 'hangus' : 'boleh direbut';
+  let specific = '';
+  if (q.type === 'mc') {
+    specific = `<div class="qfull">Opsi (pilih yang benar)<div class="opts">${q.options.map((o, k) => `
+      <div class="opt">
+        <input type="radio" name="corr-${q.id}" id="corr-${q.id}-${k}" data-q="${q.id}" data-f="correct" value="${k}" ${q.correct === k ? 'checked' : ''} aria-label="Opsi ${k + 1} benar">
+        <span class="shape-chip" style="--c:var(--answer-${k + 1});--on:var(--on-answer-${k + 1})" aria-hidden="true">${SHAPES[k]}</span>
+        <input type="text" id="opt-${q.id}-${k}" data-q="${q.id}" data-f="opt" data-k="${k}" value="${esc(o)}" placeholder="Opsi ${k + 1}" aria-label="Teks opsi ${k + 1}">
+        <button type="button" class="btn icon" data-act="opt-del" data-q="${q.id}" data-k="${k}" aria-label="Hapus opsi ${k + 1}" ${q.options.length <= 2 ? 'disabled' : ''}>×</button>
+      </div>`).join('')}</div>
+      ${q.options.length < 5 ? `<div><button type="button" class="btn ghost sm" data-act="opt-add" data-q="${q.id}">+ Opsi</button></div>` : ''}</div>`;
+  } else if (q.type === 'tf') {
+    specific = `<div class="qfull">Jawaban benar<div class="tfrow">
+      <label><input type="radio" name="corr-${q.id}" id="corr-${q.id}-t" data-q="${q.id}" data-f="correct" value="true" ${q.correct === true ? 'checked' : ''}> Benar</label>
+      <label><input type="radio" name="corr-${q.id}" id="corr-${q.id}-f" data-q="${q.id}" data-f="correct" value="false" ${q.correct === false ? 'checked' : ''}> Salah</label></div></div>`;
+  } else if (q.type === 'short') {
+    specific = `<label class="qfull">Jawaban yang diterima (pisahkan dengan koma)<input type="text" id="acc-${q.id}" data-q="${q.id}" data-f="accepted" value="${esc(q.accepted)}" placeholder="nitrogen, n2"></label>
+      <p class="note">Huruf besar/kecil, tanda baca, dan spasi berlebih diabaikan.</p>`;
+  } else if (q.type === 'number') {
+    specific = `<div class="qgrid" style="padding-top:0">
+      <label>Jawaban<input type="number" id="val-${q.id}" data-q="${q.id}" data-f="value" value="${esc(q.value)}" step="any"></label>
+      <label>Toleransi (±)<input type="number" id="tol-${q.id}" data-q="${q.id}" data-f="tolerance" value="${esc(q.tolerance)}" min="0" step="any"></label></div>`;
+  } else {
+    specific = `<label class="qfull">Kunci untuk host<textarea id="key-${q.id}" data-q="${q.id}" data-f="key" rows="2" placeholder="Hanya terlihat di layar host">${esc(q.key)}</textarea></label>
+      <p class="note">Peserta menjawab secara lisan. Host menekan Benar atau Salah.</p>`;
+  }
+  const warn = q.type === 'tf' && cfgRule(q) === 'steal'
+    ? `<p class="warn">Benar/Salah hanya punya dua pilihan. Kalau direbut, perebut tinggal memilih jawaban sebaliknya. Pertimbangkan aturan "Hangus jika salah" untuk soal ini.</p>` : '';
+  return `<details class="qcard" data-qid="${q.id}" ${openQ.has(q.id) ? 'open' : ''}>
+    <summary><span class="qnum">#${i + 1}</span><span class="qsum" id="qsum-${q.id}">${esc(q.text.trim() || '(pertanyaan kosong)')}</span><span class="qmeta" id="qmeta-${q.id}">${qMeta(q)}</span></summary>
+    <div class="qbody">
+      <div class="qgrid">
+        <label>Tipe${typeSelect(q)}</label>
+        <label>Kategori<input type="text" id="cat-${q.id}" data-q="${q.id}" data-f="category" value="${esc(q.category)}" placeholder="mis. Sains" maxlength="20"></label>
+        <label>Poin<input type="number" id="pts-${q.id}" data-q="${q.id}" data-f="points" value="${esc(q.points)}" placeholder="${cfg.defaultPoints} (default)" step="1"></label>
+        <label>Waktu (detik)<input type="number" id="time-${q.id}" data-q="${q.id}" data-f="timeS" value="${esc(q.timeS)}" placeholder="${cfg.answerS} (default)" min="3" step="1"></label>
+        <label>Jika salah<select id="rule-${q.id}" data-q="${q.id}" data-f="onWrong">
+          <option value="inherit" ${q.onWrong === 'inherit' ? 'selected' : ''}>Ikuti sesi (${ruleLabel})</option>
+          <option value="steal" ${q.onWrong === 'steal' ? 'selected' : ''}>Boleh direbut</option>
+          <option value="burn" ${q.onWrong === 'burn' ? 'selected' : ''}>Hangus</option>
+        </select></label>
+      </div>
+      <label class="qfull">Pertanyaan<textarea id="text-${q.id}" data-q="${q.id}" data-f="text" rows="2">${esc(q.text)}</textarea></label>
+      ${specific}
+      ${warn}
+      <div class="qactions">
+        <button type="button" class="btn sm" data-act="q-up" data-q="${q.id}" ${i === 0 ? 'disabled' : ''} aria-label="Naikkan soal">↑</button>
+        <button type="button" class="btn sm" data-act="q-down" data-q="${q.id}" ${i === cfg.questions.length - 1 ? 'disabled' : ''} aria-label="Turunkan soal">↓</button>
+        <button type="button" class="btn sm bad" data-act="q-del" data-q="${q.id}">Hapus soal</button>
+      </div>
+    </div>
+  </details>`;
+}
+function questionsHTML() {
+  return `<div class="qlist">${cfg.questions.map(qCard).join('')}</div>
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="btn ghost sm" data-act="q-add">+ Tambah soal</button>
+      <span class="note">* = memakai poin default. Kategori dipakai sebagai kolom papan.</span>
+    </div>`;
+}
+function renderSetup() {
+  $('#settings').innerHTML = settingsHTML();
+  $('#roster-title').textContent = cfg.format === 'team' ? 'Tim' : 'Peserta';
+  $('#roster').innerHTML = rosterHTML();
+  renderQuestions();
+}
+function renderQuestions() {
+  $('#questions').innerHTML = questionsHTML();
+  $('#q-count').textContent = `${cfg.questions.length} soal`;
+}
+
+function normalizeType(q) {
+  if (!Array.isArray(q.options) || q.options.length < 2) q.options = ['', '', '', ''];
+  if (q.type === 'mc' && (typeof q.correct !== 'number' || q.correct >= q.options.length)) q.correct = 0;
+  if (q.type === 'tf' && typeof q.correct !== 'boolean') q.correct = true;
+}
+function onQField(t) {
+  const q = cfg.questions.find(x => x.id === t.dataset.q); if (!q) return;
+  const f = t.dataset.f;
+  if (f === 'opt') q.options[+t.dataset.k] = t.value;
+  else if (f === 'correct') q.correct = q.type === 'tf' ? t.value === 'true' : +t.value;
+  else if (['points','timeS','value','tolerance'].includes(f)) q[f] = t.value === '' ? '' : Number(t.value);
+  else q[f] = t.value;
+  if (f === 'type') { normalizeType(q); renderQuestions(); }
+  else if (f === 'onWrong') renderQuestions();
+  else {
+    const s = $('#qsum-' + q.id), m = $('#qmeta-' + q.id);
+    if (s) s.textContent = q.text.trim() || '(pertanyaan kosong)';
+    if (m) m.innerHTML = qMeta(q);
+  }
+  saveConfig();
+}
+function onCfgField(t) {
+  const k = t.dataset.cfg;
+  if (NUM_LIMITS[k]) {
+    const [min, max] = NUM_LIMITS[k];
+    let v = parseInt(t.value, 10);
+    if (isNaN(v)) v = sampleConfig()[k];
+    v = Math.min(max, Math.max(min, v));
+    cfg[k] = v; t.value = v;
+  } else cfg[k] = t.value;
+  saveConfig();
+  if (k === 'format') { $('#roster-title').textContent = cfg.format === 'team' ? 'Tim' : 'Peserta'; $('#roster').innerHTML = rosterHTML(); $('#settings').innerHTML = settingsHTML(); }
+  if (['onWrong','defaultPoints','answerS'].includes(k)) renderQuestions();
+}
+
+function validate() {
+  const errs = [], list = roster(), noun = cfg.format === 'team' ? 'Tim' : 'Peserta';
+  if (list.length < 2) errs.push(`Minimal 2 ${unitWord()}.`);
+  list.forEach((p, i) => { if (!p.name.trim()) errs.push(`${noun} #${i + 1} belum punya nama.`); });
+  if (!cfg.questions.length) errs.push('Tambahkan minimal 1 soal.');
+  cfg.questions.forEach((q, i) => {
+    const n = `Soal #${i + 1}`;
+    if (!q.text.trim()) errs.push(`${n}: pertanyaan masih kosong.`);
+    if (q.type === 'mc') {
+      if (q.options.filter(o => o.trim()).length < 2) errs.push(`${n}: minimal butuh 2 opsi.`);
+      else if (!(q.options[q.correct] || '').trim()) errs.push(`${n}: opsi yang ditandai benar masih kosong.`);
+    }
+    if (q.type === 'short' && !splitAccepted(q.accepted).length) errs.push(`${n}: isi minimal satu jawaban yang diterima.`);
+    if (q.type === 'number' && (q.value === '' || isNaN(q.value))) errs.push(`${n}: isi jawaban angkanya.`);
+    if (q.timeS !== '' && Number(q.timeS) < 3) errs.push(`${n}: waktu menjawab minimal 3 detik.`);
+  });
+  return errs;
+}
+
+/* =================== GAME ENGINE =================== */
+const P = id => game.players.find(p => p.id === id);
+const curQ = () => game.qi == null ? null : game.qs[game.qi];
+const openQs = () => game.qs.filter(q => q.status === 'open');
+const R = () => game.rules;
+const qPoints = q => (q.points === '' || q.points == null) ? R().defaultPoints : Number(q.points);
+const qTime = q => (q.timeS === '' || q.timeS == null) ? R().answerS : Number(q.timeS);
+const effRule = q => q.onWrong === 'inherit' ? R().onWrong : q.onWrong;
+const attempted = q => new Set(q.attempts.map(a => a.pid));
+const eligibleIds = q => { const s = attempted(q); return game.players.filter(p => !s.has(p.id)).map(p => p.id); };
+const badge = p => `<span class="badge" style="--pc:${p.color};--pfg:${p.fg}">${p.key}</span>`;
+
+function addLog(text, tone = '') {
+  const s = Math.floor((Date.now() - game.t0) / 1000);
+  game.log.unshift({ t: `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`, text, tone });
+  if (game.log.length > 80) game.log.pop();
+}
+
+function startGame() {
+  const errs = validate();
+  if (errs.length) { $('#errors').innerHTML = `<ul>${errs.slice(0, 4).map(e => `<li>${esc(e)}</li>`).join('')}${errs.length > 4 ? `<li>dan ${errs.length - 4} lainnya</li>` : ''}</ul>`; return; }
+  $('#errors').innerHTML = '';
+  const base = roster().map((p, i) => ({ id: p.id, name: p.name.trim(), members: (p.members || '').trim(), score: 0, color: PLAYER_COLORS[i % 8][0], fg: PLAYER_COLORS[i % 8][1] }));
+  const order = cfg.order === 'random' ? shuffle(base.slice()) : base;
+  order.forEach((p, i) => { p.key = i + 1; });
+  const { individuals, teams, questions, v, ...rules } = cfg;
+  game = {
+    rules: { ...rules },
+    players: order,
+    qs: cfg.questions.map((q, i) => {
+      const g = { ...q, n: i + 1, idx: i, status: 'open', attempts: [], winnerId: null, burnedBy: null };
+      if (q.type === 'mc') {
+        const opts = []; let corr = 0;
+        q.options.forEach((t, k) => { if (t.trim()) { if (k === q.correct) corr = opts.length; opts.push(t.trim()); } });
+        g.options = opts; g.correct = corr;
+      }
+      return g;
+    }),
+    turnIdx: 0, round: 0, stage: null, ownerId: null, pickerId: null, pickNote: '',
+    qi: null, answererId: null, isSteal: false, lastWinnerId: null, lastWrong: null, nextSteal: null,
+    result: null, timer: null, draft: '', log: [], t0: Date.now(),
+  };
+  paused = false; viewAs = 'auto';
+  addLog(`Sesi dimulai. Urutan giliran: ${order.map(p => p.name).join(', ')}.`);
+  view = 'game';
+  beginTurn();
+  window.scrollTo({ top: 0 });
+}
+
+function startTimer(ms, onExpire, visible = true) { game.timer = { total: ms, left: ms, end: performance.now() + ms, onExpire, visible }; }
+function stopTimer() { if (game) game.timer = null; }
+
+function beginTurn() {
+  if (!openQs().length) return endGame();
+  const owner = game.players[game.turnIdx];
+  game.ownerId = owner.id;
+  const winnerPicks = R().picker === 'winner' && game.lastWinnerId;
+  game.pickerId = winnerPicks ? game.lastWinnerId : owner.id;
+  game.pickNote = (R().picker === 'winner' && !game.lastWinnerId && game.round > 0) ? `Soal sebelumnya tidak terjawab benar, jadi ${owner.name} memilih sendiri.` : '';
+  game.qi = null; game.answererId = null; game.result = null; game.isSteal = false;
+  game.stage = 'pick';
+  if (R().pickS > 0) startTimer(R().pickS * 1000, () => {
+    const o = openQs(); const q = o[Math.floor(Math.random() * o.length)];
+    addLog(`Waktu memilih habis. Soal #${q.n} dipilih acak.`);
+    pickQuestion(q.idx, true);
+  });
+  else stopTimer();
+  render();
+}
+
+function pickQuestion(qi, auto = false) {
+  if (game.stage !== 'pick') return;
+  const q = game.qs[qi]; if (!q || q.status !== 'open') return;
+  game.qi = qi; q.attempts = [];
+  const picker = P(game.pickerId), owner = P(game.ownerId);
+  const what = `soal #${q.n}${q.category ? ' ' + q.category : ''} (${ptsText(qPoints(q))})`;
+  if (!auto) addLog(picker === owner ? `${owner.name} memilih ${what}.` : `${picker.name} memilihkan ${what} untuk ${owner.name}.`);
+  game.answererId = owner.id; game.isSteal = false;
+  startAnswer();
+}
+
+function startAnswer() {
+  game.stage = 'answer'; game.draft = '';
+  startTimer(qTime(curQ()) * 1000, () => submitAnswer(null, 'timeout'));
+  render();
+}
+
+function grade(q, ans) {
+  if (ans == null) return false;
+  const norm = s => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  switch (q.type) {
+    case 'mc': case 'tf': return ans === q.correct;
+    case 'short': { const a = norm(ans); return !!a && splitAccepted(q.accepted).some(x => norm(x) === a); }
+    case 'number': { const x = parseNum(ans); return !isNaN(x) && Math.abs(x - Number(q.value)) <= Number(q.tolerance || 0) + 1e-9; }
+    default: return false;
+  }
+}
+function parseNum(s) {
+  const t = String(s).trim().replace(/\s/g, '').replace(',', '.');
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(t) ? parseFloat(t) : NaN;
+}
+function answerText(q, a) {
+  if (a.how === 'timeout') return 'waktu habis';
+  if (a.how === 'host') return a.correct ? 'dinilai benar' : 'dinilai salah';
+  if (q.type === 'mc') return `${SHAPES[a.ans]} ${q.options[a.ans]}`;
+  if (q.type === 'tf') return a.ans ? 'Benar' : 'Salah';
+  return String(a.ans);
+}
+function correctText(q) {
+  switch (q.type) {
+    case 'mc': return `${SHAPES[q.correct]} ${q.options[q.correct]}`;
+    case 'tf': return q.correct ? 'Benar' : 'Salah';
+    case 'short': { const a = splitAccepted(q.accepted); return a[0] + (a.length > 1 ? ` (juga diterima: ${a.slice(1).join(', ')})` : ''); }
+    case 'number': return String(q.value).replace('.', ',') + (Number(q.tolerance) ? ` (± ${String(q.tolerance).replace('.', ',')})` : '');
+    default: return q.key || 'Dinilai host';
+  }
+}
+
+function submitAnswer(ans, how = 'player', verdict) {
+  if (game.stage !== 'answer') return;
+  const q = curQ(), p = P(game.answererId);
+  stopTimer();
+  const correct = how === 'host' ? verdict : how === 'timeout' ? false : grade(q, ans);
+  q.attempts.push({ pid: p.id, ans, how, correct });
+  if (correct) {
+    const pts = qPoints(q);
+    p.score += pts; q.status = 'won'; q.winnerId = p.id; game.lastWinnerId = p.id;
+    addLog(`${p.name} ${game.isSteal ? 'merebut dan ' : ''}menjawab benar soal #${q.n}: ${fmtDelta(pts)}.`, 'good');
+    game.result = { kind: 'won', pid: p.id, delta: pts };
+    game.stage = 'reveal';
+    return render();
+  }
+  const pen = R().penalty;
+  if (pen) p.score -= pen;
+  const shown = how === 'player' ? ` (${answerText(q, { ans, how })})` : how === 'host' ? ' (dinilai host)' : '';
+  addLog(`${p.name} ${how === 'timeout' ? 'kehabisan waktu' : 'salah'}${shown}${pen ? `, ${fmtDelta(-pen)}` : ''}.`, 'bad');
+  game.lastWrong = { pid: p.id, how, pen };
+  if (effRule(q) === 'burn') return closeQ('burned', 'rule');
+  const eligible = eligibleIds(q);
+  const stealsUsed = q.attempts.length - 1;
+  if (!eligible.length || (R().maxSteals > 0 && stealsUsed >= R().maxSteals)) return closeQ('missed');
+  game.nextSteal = R().stealMode === 'next' ? { mode: 'next', pid: nextEligible(p.id, eligible) } : { mode: 'buzz' };
+  game.stage = 'wrong';
+  startTimer(2200, () => {
+    if (game.nextSteal.mode === 'next') {
+      game.answererId = game.nextSteal.pid; game.isSteal = true;
+      addLog(`Soal #${q.n} dilempar ke ${P(game.answererId).name}.`);
+      startAnswer();
+    } else startBuzz();
+  }, false);
+  render();
+}
+function nextEligible(fromId, eligible) {
+  const n = game.players.length, start = game.players.findIndex(p => p.id === fromId);
+  for (let i = 1; i <= n; i++) { const p = game.players[(start + i) % n]; if (eligible.includes(p.id)) return p.id; }
+  return eligible[0];
+}
+function startBuzz() {
+  game.stage = 'buzz';
+  startTimer(R().buzzS * 1000, () => { addLog('Tidak ada yang menekan buzz.'); closeQ('missed'); });
+  render();
+}
+function buzz(pid) {
+  if (!game || game.stage !== 'buzz') return;
+  if (!eligibleIds(curQ()).includes(pid)) return;
+  addLog(`${P(pid).name} paling cepat menekan buzz.`);
+  game.answererId = pid; game.isSteal = true;
+  startAnswer();
+}
+function closeQ(kind, by = null) {
+  stopTimer();
+  const q = curQ();
+  q.status = kind; q.burnedBy = by;
+  game.lastWinnerId = null;
+  if (kind === 'burned') addLog(by === 'host' ? `Host menghanguskan soal #${q.n}.` : `Soal #${q.n} hangus.`, 'bad');
+  else addLog(`Soal #${q.n} ditutup tanpa jawaban benar.`, 'bad');
+  game.result = { kind, by };
+  game.stage = 'reveal';
+  render();
+}
+function nextTurn() {
+  game.turnIdx = (game.turnIdx + 1) % game.players.length;
+  game.round++;
+  beginTurn();
+}
+function endGame() {
+  stopTimer();
+  game.stage = 'end';
+  addLog('Sesi selesai.');
+  render();
+}
+
+/* host actions */
+function hostBurnCurrent() {
+  if (!['answer','wrong','buzz'].includes(game.stage)) return;
+  closeQ('burned', 'host');
+}
+function hostBurnTile(qi) {
+  const q = game.qs[qi]; if (!q || q.status !== 'open' || (qi === game.qi && game.stage !== 'pick')) return;
+  q.status = 'burned'; q.burnedBy = 'host';
+  addLog(`Host menghanguskan soal #${q.n}.`, 'bad');
+  if (game.stage === 'pick' && !openQs().length) return endGame();
+  render();
+}
+function hostRestore(qi) {
+  const q = game.qs[qi]; if (!q || !['burned','missed'].includes(q.status) || game.stage === 'end') return;
+  if (qi === game.qi && game.stage !== 'pick') return;
+  q.status = 'open'; q.burnedBy = null; q.attempts = [];
+  addLog(`Host membuka lagi soal #${q.n}.`);
+  render();
+}
+function hostSkip() {
+  if (game.stage !== 'pick') return;
+  addLog(`Giliran ${P(game.ownerId).name} dilewati.`);
+  nextTurn();
+}
+function togglePause() {
+  paused = !paused;
+  if (!paused && game && game.timer) game.timer.end = performance.now() + game.timer.left;
+  if (game) addLog(paused ? 'Host menjeda waktu.' : 'Waktu dilanjutkan.');
+  render();
+}
+
+setInterval(() => {
+  if (!game || !game.timer) return;
+  const t = game.timer;
+  if (!paused) {
+    t.left = Math.max(0, t.end - performance.now());
+    if (t.left <= 0) { game.timer = null; t.onExpire(); return; }
+  }
+  if (view === 'game') updateTimerUI();
+}, 100);
+
+/* =================== RENDER: GAME =================== */
+function phoneActor() {
+  switch (game.stage) {
+    case 'pick': return game.pickerId;
+    case 'answer': return game.answererId;
+    case 'wrong': return game.lastWrong.pid;
+    case 'buzz': return null;
+    case 'reveal': { const q = curQ(); return game.result.kind === 'won' ? game.result.pid : (q.attempts.length ? q.attempts[q.attempts.length - 1].pid : game.ownerId); }
+    case 'end': return [...game.players].sort((a, b) => b.score - a.score)[0].id;
+  }
+  return null;
+}
+
+function bannerInfo() {
+  const g = game, q = curQ(), owner = P(g.ownerId);
+  switch (g.stage) {
+    case 'pick': {
+      const picker = P(g.pickerId);
+      return { chip: 'Memilih soal', main: picker === owner ? `Giliran <b>${esc(owner.name)}</b> memilih soal` : `<b>${esc(picker.name)}</b> memilihkan soal untuk <b>${esc(owner.name)}</b>`,
+        sub: g.pickNote || (R().pickS > 0 ? 'Kalau waktu habis, soal dipilih acak.' : 'Memilih soal tanpa batas waktu.') };
+    }
+    case 'answer': {
+      const a = P(g.answererId);
+      return { chip: g.isSteal ? 'Merebut' : 'Menjawab', main: g.isSteal ? `<b>${esc(a.name)}</b> merebut soal ini` : `<b>${esc(a.name)}</b> menjawab`,
+        sub: q.type === 'oral' ? 'Jawab secara lisan. Host yang menilai.' : 'Jawaban dikirim dari HP.' };
+    }
+    case 'wrong': {
+      const w = P(g.lastWrong.pid);
+      return { chip: 'Salah', tone: 'bad', main: `<b>${esc(w.name)}</b> ${g.lastWrong.how === 'timeout' ? 'kehabisan waktu' : 'belum tepat'}`,
+        sub: g.nextSteal.mode === 'next' ? `Soal dilempar ke ${esc(P(g.nextSteal.pid).name)}…` : 'Bersiap rebutan…' };
+    }
+    case 'buzz': return { chip: 'Rebutan', main: 'Rebutan! Yang paling cepat menekan BUZZ yang menjawab', sub: `${eligibleIds(q).length} ${unitWord(R().format)} bisa merebut.` };
+    case 'reveal': {
+      const r = g.result;
+      if (r.kind === 'won') return { chip: 'Hasil', tone: 'good', main: `<b>${esc(P(r.pid).name)}</b> benar! ${fmtDelta(r.delta)}`, sub: g.isSteal ? 'Berhasil merebut soal.' : '' };
+      if (r.kind === 'burned') return { chip: 'Hasil', tone: 'bad', main: r.by === 'host' ? 'Soal dihanguskan host' : 'Soal hangus', sub: r.by === 'host' ? '' : 'Soal ini diatur hangus kalau jawabannya salah.' };
+      return { chip: 'Hasil', tone: 'bad', main: 'Tidak ada yang menjawab benar', sub: 'Soal ditutup.' };
+    }
+    case 'end': return { chip: 'Selesai', main: 'Sesi selesai', sub: '' };
+  }
+  return { chip: '', main: '', sub: '' };
+}
+
+function boardHTML() {
+  const qs = game.qs;
+  const cats = [...new Set(qs.map(q => (q.category || '').trim()).filter(Boolean))];
+  const useCols = qs.every(q => (q.category || '').trim()) && cats.length >= 2 && cats.length <= 6;
+  const tile = q => {
+    if (q.status === 'open') {
+      const pts = qPoints(q);
+      return `<div class="tile"><span class="t-n">#${q.n}</span><span class="t-ty">${TYPE_SHORT[q.type]}</span><span class="t-pts ${pts < 0 ? 'neg' : ''}">${ptsText(pts)}</span>${useCols || !q.category ? '' : `<span class="t-cat">${esc(q.category)}</span>`}</div>`;
+    }
+    if (q.status === 'won') {
+      const w = P(q.winnerId);
+      return `<div class="tile won" style="--tc:${w.color};--tf:${w.fg}"><span class="t-n">#${q.n}</span><span class="t-who">${esc(w.name)}</span><span class="t-small">${fmtDelta(qPoints(q))}</span></div>`;
+    }
+    const lbl = q.status === 'burned' ? (q.burnedBy === 'host' ? 'Hangus (host)' : 'Hangus') : 'Tak terjawab';
+    return `<div class="tile closed"><span class="t-n">#${q.n}</span><span class="t-lbl">${lbl}</span></div>`;
+  };
+  if (useCols) {
+    return `<div class="board cols" style="--cols:${cats.length}">${cats.map(c => {
+      const col = qs.filter(q => q.category.trim() === c).sort((a, b) => qPoints(a) - qPoints(b) || a.n - b.n);
+      return `<div class="bcol"><h4 title="${esc(c)}">${esc(c)}</h4>${col.map(tile).join('')}</div>`;
+    }).join('')}</div>`;
+  }
+  return `<div class="board flat">${qs.map(tile).join('')}</div>`;
+}
+
+function questionHTML(q) {
+  const reveal = game.stage === 'reveal';
+  const showPrev = R().showPrevWrong === 'yes' || reveal;
+  const wrongSet = new Set(q.attempts.filter(a => !a.correct && a.how === 'player').map(a => a.ans));
+  const rule = effRule(q);
+  const meta = `<div class="pj-meta"><span class="mono">#${q.n}</span>${q.category ? `<span>${esc(q.category)}</span>` : ''}<span class="m-pts">${ptsText(qPoints(q))} poin</span><span>${TYPES[q.type]}</span><span>${rule === 'burn' ? 'Hangus jika salah' : 'Boleh direbut'}</span></div>`;
+  const optTile = (label, slot, value, isC) => {
+    const cls = reveal ? (isC ? 'is-correct' : 'is-dim') : (showPrev && wrongSet.has(value) ? 'is-struck' : '');
+    return `<div class="pj-opt ${cls}" style="--c:var(--answer-${slot});--on:var(--on-answer-${slot})"><span class="shape" aria-hidden="true">${SHAPES[slot - 1]}</span><span>${esc(label)}</span>${reveal && isC ? '<span class="ok" aria-label="jawaban benar">✓</span>' : ''}</div>`;
+  };
+  let area;
+  if (q.type === 'mc') area = `<div class="pj-opts">${q.options.map((o, k) => optTile(o, k + 1, k, k === q.correct)).join('')}</div>`;
+  else if (q.type === 'tf') area = `<div class="pj-opts">${optTile('Benar', 4, true, q.correct === true)}${optTile('Salah', 1, false, q.correct === false)}</div>`;
+  else if (reveal) area = `<div class="pj-key">Jawaban: <b>${esc(correctText(q))}</b></div>`;
+  else area = `<div class="pj-hint">${q.type === 'oral' ? 'Jawab secara lisan' : 'Jawaban diketik di HP'}</div>`;
+  const atts = q.attempts.length ? `<ul class="atts" aria-label="Percobaan">${q.attempts.map(a => {
+    const p = P(a.pid); const txt = (showPrev || a.correct) ? answerText(q, a) : '';
+    return `<li class="att ${a.correct ? 'ok' : 'no'}">${badge(p)}<span>${esc(p.name)}</span>${txt ? `<span class="att-a">${esc(txt)}</span>` : ''}<span class="att-r">${a.correct ? '✓' : '✗'}</span></li>`;
+  }).join('')}</ul>` : '';
+  return `<div class="pj-q">${meta}<h2 class="pj-qtext">${esc(q.text)}</h2>${area}${atts}</div>`;
+}
+
+function ranking() {
+  const s = [...game.players].sort((a, b) => b.score - a.score);
+  let rank = 0, prev = null;
+  return s.map((p, i) => { if (p.score !== prev) { rank = i + 1; prev = p.score; } return { p, rank }; });
+}
+function podiumHTML() {
+  const r = ranking();
+  const slots = [r[1], r[0], r[2]].filter(Boolean);
+  const cls = x => `pod-${Math.min(x.rank, 3)}`;
+  const counts = { won: 0, burned: 0, missed: 0, open: 0 };
+  game.qs.forEach(q => counts[q.status]++);
+  return `<div class="podium">${slots.map(x => `<div class="pod ${cls(x)}">${badge(x.p)}<span class="p-name">${esc(x.p.name)}</span><span class="p-score">${ptsText(x.p.score)}</span><div class="step">${x.rank}</div></div>`).join('')}</div>
+    ${r.length > 3 ? `<ol class="rest">${r.slice(3).map(x => `<li><span class="r-n">${x.rank}</span>${badge(x.p)}<span>${esc(x.p.name)}</span><span class="r-s">${ptsText(x.p.score)}</span></li>`).join('')}</ol>` : ''}
+    <p class="pj-stats">Dijawab benar ${counts.won} · Hangus ${counts.burned} · Tak terjawab ${counts.missed}${counts.open ? ` · Belum dimainkan ${counts.open}` : ''}</p>`;
+}
+
+function scoreHTML() {
+  const g = game, q = curQ();
+  const inQ = q && ['answer','wrong','buzz','reveal'].includes(g.stage);
+  const tried = inQ ? attempted(q) : new Set();
+  const actor = g.stage === 'pick' ? g.pickerId : g.stage === 'answer' ? g.answererId : null;
+  return g.players.map(p => {
+    const won = inQ && q.winnerId === p.id;
+    const cls = [p.id === g.ownerId && g.stage !== 'end' ? 'is-turn' : '', p.id === actor ? 'is-actor' : '', tried.has(p.id) && !won ? 'is-out' : ''].join(' ');
+    return `<div class="chip ${cls}">${p.id === g.ownerId && g.stage !== 'end' ? '<span class="c-turn">giliran</span>' : ''}${badge(p)}<span class="c-name">${esc(p.name)}${p.members ? `<small title="${esc(p.members)}">${esc(p.members)}</small>` : ''}</span><span class="c-score">${ptsText(p.score)}</span></div>`;
+  }).join('');
+}
+
+function renderProjector() {
+  const b = bannerInfo();
+  const q = curQ();
+  const body = game.stage === 'pick' ? boardHTML() : game.stage === 'end' ? podiumHTML() : questionHTML(q);
+  $('#projector').innerHTML = `
+    <div class="pj-head">
+      <div class="pj-banner ${b.tone || ''}"><span class="stage-chip">${b.chip}</span><div class="b-main">${b.main}</div>${b.sub ? `<div class="b-sub">${b.sub}</div>` : ''}</div>
+      <div class="pj-timer" id="pj-timer" hidden><svg viewBox="0 0 44 44" aria-hidden="true"><circle class="trk" cx="22" cy="22" r="19"></circle><circle class="arc" id="pj-arc" cx="22" cy="22" r="19" stroke-dasharray="119.38" stroke-dashoffset="0"></circle></svg><span id="pj-num"></span></div>
+    </div>
+    <div class="pj-body">${body}</div>
+    <footer class="pj-score">${scoreHTML()}</footer>`;
+}
+
+function phoneBody(v) {
+  const g = game, q = curQ(), st = g.stage;
+  const unit = unitWord(R().format);
+  if (st === 'buzz') {
+    const el = eligibleIds(q);
+    if (!v) {
+      return `<div class="ph-body"><p class="ph-kicker">Simulasi rebutan</p><p class="ph-title">Siapa paling cepat?</p>
+        <p class="ph-text">Di sesi nyata tiap ${unit} menekan BUZZ di HP-nya sendiri. Di sini, klik nama atau tekan angkanya di keyboard.</p>
+        <div class="buzzgrid">${g.players.map(p => `<button type="button" class="b3d" data-act="buzz" data-pid="${p.id}" style="--c:${p.color};--on:${p.fg}" ${el.includes(p.id) ? '' : 'disabled'}><span>${esc(p.name)}</span><small>${el.includes(p.id) ? `tombol ${p.key}` : 'sudah mencoba'}</small></button>`).join('')}</div></div>`;
+    }
+    return el.includes(v.id)
+      ? `<div class="ph-body center"><p class="ph-kicker">Rebutan</p><button type="button" class="buzz" data-act="buzz" data-pid="${v.id}">BUZZ</button><p class="ph-text">Tekan secepatnya untuk merebut soal.</p></div>`
+      : `<div class="ph-body center"><p class="ph-title">Kamu sudah mencoba soal ini</p><p class="ph-text">Tunggu soal berikutnya.</p></div>`;
+  }
+  if (!v) return `<div class="ph-body center"><p class="ph-text">Pilih peserta di atas.</p></div>`;
+  if (st === 'pick') {
+    const picker = P(g.pickerId), owner = P(g.ownerId);
+    if (v.id === picker.id) {
+      const list = openQs();
+      return `<div class="ph-body"><p class="ph-kicker">${picker === owner ? 'Giliranmu' : `Kamu menjawab benar`}</p>
+        <p class="ph-title">${picker === owner ? 'Pilih soal' : `Pilihkan soal untuk ${esc(owner.name)}`}</p>
+        <p class="ph-text">${list.length} soal tersisa. Isi soal baru terlihat setelah dipilih.</p>
+        <div class="picklist">${list.map(x => { const pts = qPoints(x); return `<button type="button" class="pick-row" data-act="pick" data-qi="${x.idx}"><span class="pr-n">#${x.n}</span><span class="pr-main"><b>${esc(x.category || 'Soal ' + x.n)}</b><small>${TYPES[x.type]} · ${qTime(x)} detik${effRule(x) === 'burn' ? ' · hangus jika salah' : ''}</small></span><span class="pr-pts ${pts < 0 ? 'neg' : ''}">${ptsText(pts)}</span></button>`; }).join('')}</div></div>`;
+    }
+    return `<div class="ph-body center"><p class="ph-title">Menunggu ${esc(picker.name)} memilih soal</p>
+      <p class="ph-text">${v.id === owner.id && picker !== owner ? `${esc(picker.name)} sedang memilihkan soal untukmu. Bersiap!` : `Giliran ${esc(owner.name)}.`}</p></div>`;
+  }
+  if (st === 'answer') {
+    const a = P(g.answererId);
+    if (v.id === a.id) {
+      const struck = R().showPrevWrong === 'yes' ? new Set(q.attempts.filter(x => x.how === 'player').map(x => x.ans)) : new Set();
+      let input = '';
+      if (q.type === 'mc') input = `<div class="optgrid">${q.options.map((o, k) => `<button type="button" class="b3d" data-act="ans" data-v="${k}" style="--c:var(--answer-${k + 1});--on:var(--on-answer-${k + 1})" ${struck.has(k) ? 'disabled' : ''}><span class="shape" aria-hidden="true">${SHAPES[k]}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
+      else if (q.type === 'tf') input = `<div class="optgrid"><button type="button" class="b3d" data-act="ans" data-v="true" style="--c:var(--answer-4);--on:var(--on-answer-4)" ${struck.has(true) ? 'disabled' : ''}><span class="shape" aria-hidden="true">■</span><span>Benar</span></button><button type="button" class="b3d" data-act="ans" data-v="false" style="--c:var(--answer-1);--on:var(--on-answer-1)" ${struck.has(false) ? 'disabled' : ''}><span class="shape" aria-hidden="true">▲</span><span>Salah</span></button></div>`;
+      else if (q.type === 'oral') input = `<p class="ph-text" style="padding:14px;border:1px dashed var(--line-strong);border-radius:12px;text-align:center">Sebutkan jawabanmu dengan lantang. Host akan menilai.</p>`;
+      else input = `<form class="ph-form" id="ph-form" novalidate><label for="ph-input" class="ph-kicker">${q.type === 'number' ? 'Jawaban (angka)' : 'Jawabanmu'}</label><input type="text" id="ph-input" ${q.type === 'number' ? 'inputmode="decimal"' : ''} autocomplete="off" value="${esc(g.draft)}"><p class="ph-err" id="ph-err" hidden></p><button type="submit" class="b3d pill">Kirim</button></form>`;
+      return `<div class="ph-body"><p class="ph-kicker">${g.isSteal ? 'Rebut soal' : 'Jawab'} · ${ptsText(qPoints(q))} poin</p><p class="ph-q">${esc(q.text)}</p>${input}</div>`;
+    }
+    const tried = attempted(q).has(v.id);
+    const canSteal = effRule(q) === 'steal' && !tried;
+    return `<div class="ph-body center"><p class="ph-title">${esc(a.name)} sedang menjawab</p><p class="ph-text">${tried ? 'Kamu sudah mencoba soal ini.' : canSteal ? 'Siap-siap. Kalau jawabannya salah, kamu bisa merebut.' : 'Soal ini hangus kalau jawabannya salah.'}</p></div>`;
+  }
+  if (st === 'wrong') {
+    const w = P(g.lastWrong.pid);
+    if (v.id === w.id) return `<div class="ph-body center"><div class="big-mark bad" aria-hidden="true">✗</div><p class="ph-title">${g.lastWrong.how === 'timeout' ? 'Waktu habis' : 'Belum tepat'}</p>${g.lastWrong.pen ? `<p class="big-pts" style="color:var(--danger)">${fmtDelta(-g.lastWrong.pen)}</p>` : ''}<p class="ph-text">Soal ini akan direbut ${unit} lain.</p></div>`;
+    const toMe = g.nextSteal.mode === 'next' && g.nextSteal.pid === v.id;
+    return `<div class="ph-body center"><p class="ph-title">${toMe ? 'Soal dilempar ke kamu!' : `${esc(w.name)} belum tepat`}</p><p class="ph-text">${toMe ? 'Bersiap menjawab.' : g.nextSteal.mode === 'buzz' ? (eligibleIds(q).includes(v.id) ? 'Bersiap menekan BUZZ.' : 'Kamu sudah mencoba soal ini.') : `Soal dilempar ke ${esc(P(g.nextSteal.pid).name)}.`}</p></div>`;
+  }
+  if (st === 'reveal') {
+    const r = g.result;
+    if (r.kind === 'won' && r.pid === v.id) return `<div class="ph-body center"><div class="big-mark good" aria-hidden="true">✓</div><p class="ph-title">Benar!</p><p class="big-pts" style="color:${r.delta < 0 ? 'var(--danger)' : 'var(--success)'}">${fmtDelta(r.delta)}</p><p class="ph-text">${R().picker === 'winner' && openQs().length ? 'Kamu akan memilihkan soal untuk giliran berikutnya.' : 'Mantap!'}</p></div>`;
+    const mine = q.attempts.find(a => a.pid === v.id);
+    const head = mine ? `<div class="big-mark bad" aria-hidden="true">✗</div><p class="ph-title">Belum tepat</p>` : `<p class="ph-title">${r.kind === 'won' ? `${esc(P(r.pid).name)} benar` : r.kind === 'burned' ? 'Soal hangus' : 'Tidak ada yang benar'}</p>`;
+    return `<div class="ph-body center">${head}<p class="ph-text">Jawaban: <b>${esc(correctText(q))}</b></p><p class="ph-text">Menunggu host lanjut.</p></div>`;
+  }
+  if (st === 'end') {
+    const me = ranking().find(x => x.p.id === v.id);
+    return `<div class="ph-body center"><p class="ph-kicker">Sesi selesai</p><div class="big-mark ${me.rank === 1 ? 'good' : ''}" style="font-size:48px">#${me.rank}</div><p class="ph-title">${me.rank === 1 ? 'Juara!' : `Peringkat ${me.rank}`}</p><p class="big-pts">${ptsText(me.p.score)} poin</p></div>`;
+  }
+  return '';
+}
+
+function renderPhone() {
+  const sel = $('#viewas');
+  if (viewAs !== 'auto' && !game.players.some(p => p.id === viewAs)) viewAs = 'auto';
+  sel.innerHTML = `<option value="auto">Otomatis (yang sedang beraksi)</option>` + game.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  sel.value = viewAs;
+  const vid = viewAs === 'auto' ? phoneActor() : viewAs;
+  const v = vid ? P(vid) : null;
+  const team = R().format === 'team';
+  $('#phone').innerHTML = `
+    <div class="ph-status">${v ? `${badge(v)}<span>${team ? 'Perwakilan ' : ''}${esc(v.name)}</span><span class="ph-score">${ptsText(v.score)} poin</span>` : `<span>Semua ${unitWord(R().format)}</span>`}</div>
+    <div class="ph-timer" id="ph-timer" hidden><i id="ph-bar"></i></div>
+    ${phoneBody(v)}`;
+  const inp = $('#ph-input');
+  if (inp && document.activeElement?.closest('#host') == null) inp.focus({ preventScroll: true });
+}
+
+function renderHost() {
+  const g = game, q = curQ(), st = g.stage;
+  const timed = g.timer && g.timer.visible && ['pick','answer','buzz'].includes(st);
+  let main = '';
+  if (st === 'pick') {
+    main = `<p>Menunggu <b>${esc(P(g.pickerId).name)}</b> memilih soal.</p><button type="button" class="btn" data-act="skip">Lewati giliran ${esc(P(g.ownerId).name)}</button>`;
+  } else if (st === 'answer') {
+    main = `<div class="keybox"><span>Kunci jawaban (hanya host)</span>${esc(correctText(q))}</div>
+      <p>${q.type === 'oral' ? 'Nilai jawaban lisan:' : 'Nilai manual, misalnya kalau peserta menjawab lisan:'}</p>
+      <div class="row2"><button type="button" class="btn good" data-act="judge" data-v="1">✓ Benar</button><button type="button" class="btn bad" data-act="judge" data-v="0">✗ Salah</button></div>
+      <button type="button" class="btn" data-act="burn-cur">Hanguskan soal ini</button>`;
+  } else if (st === 'wrong') {
+    main = `<p>Soal akan ${g.nextSteal.mode === 'next' ? `dilempar ke <b>${esc(P(g.nextSteal.pid).name)}</b>` : 'dibuka untuk rebutan'}.</p><button type="button" class="btn" data-act="burn-cur">Hanguskan soal ini</button>`;
+  } else if (st === 'buzz') {
+    main = `<p>Simulasi buzz: tekan ${g.players.filter(p => eligibleIds(q).includes(p.id)).map(p => `<span class="kbd">${p.key}</span>`).join(' ')} di keyboard, atau klik nama di layar HP.</p><button type="button" class="btn" data-act="burn-cur">Hanguskan soal ini</button>`;
+  } else if (st === 'reveal') {
+    const next = openQs().length ? g.players[(g.turnIdx + 1) % g.players.length] : null;
+    main = next ? `<button type="button" class="btn primary block" data-act="next">Giliran berikutnya: ${esc(next.name)} →</button>` : `<button type="button" class="btn primary block" data-act="next">Lihat hasil akhir →</button>`;
+  } else if (st === 'end') {
+    main = `<p>Semua soal sudah dimainkan atau sesi diakhiri.</p><div class="row2"><button type="button" class="btn primary" data-act="again">Main lagi</button><button type="button" class="btn" data-act="nav-setup">Ubah pengaturan</button></div>`;
+  }
+  const inQ = ['answer','wrong','buzz','reveal'].includes(st);
+  const rows = g.qs.map(x => {
+    const cur = inQ && x.idx === g.qi;
+    let stTxt, stCls = '', act = '';
+    if (x.status === 'open') { stTxt = cur ? 'Sedang dimainkan' : 'Tersedia'; stCls = cur ? 'cur' : ''; }
+    else if (x.status === 'won') { stTxt = `Dijawab ${P(x.winnerId).name}`; stCls = 'won'; }
+    else { stTxt = x.status === 'burned' ? (x.burnedBy === 'host' ? 'Dihanguskan host' : 'Hangus') : 'Tak terjawab'; stCls = 'closed'; }
+    if (st !== 'end') {
+      if (x.status === 'open' && cur && st !== 'reveal') act = `<button type="button" class="btn sm" data-act="burn-cur">Hanguskan</button>`;
+      else if (x.status === 'open' && !cur) act = `<button type="button" class="btn sm" data-act="burn-q" data-qi="${x.idx}">Hanguskan</button>`;
+      else if (['burned','missed'].includes(x.status) && !cur) act = `<button type="button" class="btn sm ghost" data-act="restore-q" data-qi="${x.idx}">Buka lagi</button>`;
+    }
+    return `<li><span class="h-n">#${x.n}</span><span class="h-main"><b>${esc(x.category || TYPES[x.type])} · ${ptsText(qPoints(x))}</b><span class="h-st ${stCls}">${esc(stTxt)}</span></span>${act}</li>`;
+  }).join('');
+  const hostOpen = $('#host-q')?.open ?? true, logOpen = $('#host-log')?.open ?? false;
+  $('#host').innerHTML = `
+    <div class="host-head"><h3>Kontrol host</h3>${timed || (paused && g.timer) ? `<button type="button" class="btn sm" data-act="pause">${paused ? 'Lanjutkan waktu' : 'Jeda waktu'}</button>` : ''}</div>
+    <div class="host-main">${main}</div>
+    <details id="host-q" ${hostOpen ? 'open' : ''}><summary>Soal di papan</summary><ul class="hq">${rows}</ul></details>
+    <details id="host-log" ${logOpen ? 'open' : ''}><summary>Riwayat (${g.log.length})</summary><ol class="log">${g.log.map(l => `<li class="${l.tone}"><time>${l.t}</time><span>${esc(l.text)}</span></li>`).join('')}</ol></details>
+    ${st !== 'end' ? `<div class="host-foot"><button type="button" class="btn sm bad" data-act="end">Akhiri sesi</button></div>` : ''}`;
+}
+
+function updateTimerUI() {
+  const t = game && game.timer;
+  const ring = $('#pj-timer'), bar = $('#ph-timer');
+  if (!ring || !bar) return;
+  const show = !!(t && t.visible);
+  ring.hidden = !show; bar.hidden = !show;
+  if (!show) return;
+  const frac = Math.max(0, t.left / t.total);
+  const lvl = frac <= 0.1 ? 'crit' : frac <= 0.3 ? 'warn' : '';
+  ring.className = `pj-timer ${lvl} ${paused ? 'paused' : ''}`;
+  bar.className = `ph-timer ${lvl}`;
+  $('#pj-arc').setAttribute('stroke-dashoffset', String(119.38 * (1 - frac)));
+  $('#pj-num').textContent = paused ? 'jeda' : String(Math.ceil(t.left / 1000));
+  $('#ph-bar').style.transform = `scaleX(${frac})`;
+}
+
+function render() {
+  $('#view-setup').hidden = view !== 'setup';
+  $('#view-game').hidden = view !== 'game';
+  $('#startbar').hidden = view !== 'setup';
+  $('#tab-setup').setAttribute('aria-pressed', String(view === 'setup'));
+  $('#tab-game').setAttribute('aria-pressed', String(view === 'game'));
+  $('#tab-game').disabled = !game;
+  $('#btn-resume').hidden = !game || game.stage === 'end';
+  $('#btn-start').textContent = game && game.stage !== 'end' ? 'Mulai sesi baru' : 'Mulai sesi';
+  if (view === 'game' && game) { renderProjector(); renderPhone(); renderHost(); updateTimerUI(); }
+}
+
+function goSetup() {
+  if (game && game.timer && !paused && game.stage !== 'end') { paused = true; addLog('Waktu dijeda karena host membuka pengaturan.'); }
+  view = 'setup';
+  renderSetup(); render();
+}
+
+/* inline confirmation for destructive buttons (confirm() is unavailable) */
+function arm(btn, label, fn) {
+  if (btn.dataset.armed === '1') { delete btn.dataset.armed; fn(); return; }
+  const orig = btn.textContent;
+  btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = label;
+  setTimeout(() => { if (btn.isConnected && btn.dataset.armed === '1') { delete btn.dataset.armed; btn.classList.remove('armed'); btn.textContent = orig; } }, 3000);
+}
+
+/* =================== EVENTS =================== */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  const qById = id => cfg.questions.find(q => q.id === id);
+  switch (a) {
+    case 'nav-setup': goSetup(); break;
+    case 'nav-game': if (game) { view = 'game'; render(); } break;
+    case 'start': startGame(); break;
+    case 'again': startGame(); break;
+    case 'reset-sample': arm(b, 'Klik lagi untuk mengganti semua', () => { cfg = sampleConfig(); openQ.clear(); saveConfig(); renderSetup(); render(); }); break;
+    case 'p-add': { const list = roster(); if (list.length < MAX_PLAYERS) { list.push({ id: uid(), name: `${cfg.format === 'team' ? 'Tim' : 'Peserta'} ${list.length + 1}`, members: '' }); saveConfig(); $('#roster').innerHTML = rosterHTML(); } break; }
+    case 'p-del': { const list = roster(); const i = list.findIndex(p => p.id === b.dataset.id); if (i > -1 && list.length > 2) { list.splice(i, 1); saveConfig(); $('#roster').innerHTML = rosterHTML(); } break; }
+    case 'q-add': { const q = { id: uid(), type: 'mc', category: '', text: '', options: ['', '', '', ''], correct: 0, accepted: '', value: '', tolerance: 0, key: '', points: '', timeS: '', onWrong: 'inherit' }; cfg.questions.push(q); openQ.add(q.id); saveConfig(); renderQuestions(); $('#text-' + q.id)?.focus(); break; }
+    case 'q-del': arm(b, 'Klik lagi untuk menghapus', () => { cfg.questions = cfg.questions.filter(q => q.id !== b.dataset.q); saveConfig(); renderQuestions(); }); break;
+    case 'q-up': case 'q-down': { const i = cfg.questions.findIndex(q => q.id === b.dataset.q); const j = a === 'q-up' ? i - 1 : i + 1; if (i > -1 && j >= 0 && j < cfg.questions.length) { [cfg.questions[i], cfg.questions[j]] = [cfg.questions[j], cfg.questions[i]]; saveConfig(); renderQuestions(); } break; }
+    case 'opt-add': { const q = qById(b.dataset.q); if (q && q.options.length < 5) { q.options.push(''); saveConfig(); renderQuestions(); } break; }
+    case 'opt-del': { const q = qById(b.dataset.q); const k = +b.dataset.k; if (q && q.options.length > 2) { q.options.splice(k, 1); if (q.correct === k) q.correct = 0; else if (q.correct > k) q.correct--; saveConfig(); renderQuestions(); } break; }
+    case 'pick': pickQuestion(+b.dataset.qi); break;
+    case 'ans': submitAnswer(b.dataset.v === 'true' ? true : b.dataset.v === 'false' ? false : +b.dataset.v); break;
+    case 'buzz': buzz(b.dataset.pid); break;
+    case 'judge': submitAnswer(null, 'host', b.dataset.v === '1'); break;
+    case 'burn-cur': hostBurnCurrent(); break;
+    case 'burn-q': hostBurnTile(+b.dataset.qi); break;
+    case 'restore-q': hostRestore(+b.dataset.qi); break;
+    case 'skip': hostSkip(); break;
+    case 'next': if (game.stage === 'reveal') nextTurn(); break;
+    case 'pause': togglePause(); break;
+    case 'end': arm(b, 'Klik lagi untuk mengakhiri', endGame); break;
+  }
+});
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'ph-input' && game) { game.draft = t.value; return; }
+  if (t.dataset.p) { const p = roster().find(x => x.id === t.dataset.p); if (p) { p[t.dataset.pf] = t.value; saveConfig(); } return; }
+  if (t.dataset.q && t.tagName !== 'SELECT' && t.type !== 'radio') onQField(t);
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'viewas') { viewAs = t.value; renderPhone(); updateTimerUI(); return; }
+  if (t.dataset.cfg) return onCfgField(t);
+  if (t.dataset.q && (t.tagName === 'SELECT' || t.type === 'radio')) onQField(t);
+});
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (d.classList && d.classList.contains('qcard')) { d.open ? openQ.add(d.dataset.qid) : openQ.delete(d.dataset.qid); }
+}, true);
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'ph-form') return;
+  e.preventDefault();
+  const q = curQ(); const val = ($('#ph-input')?.value || '').trim();
+  const err = $('#ph-err');
+  if (!val) { err.textContent = 'Jawaban masih kosong.'; err.hidden = false; return; }
+  if (q.type === 'number' && isNaN(parseNum(val))) { err.textContent = 'Masukkan angka, misalnya 38 atau 2,5.'; err.hidden = false; return; }
+  submitAnswer(val);
+});
+document.addEventListener('keydown', e => {
+  if (view !== 'game' || !game || game.stage !== 'buzz') return;
+  if (e.target.matches('input, textarea, select')) return;
+  if (/^[1-9]$/.test(e.key)) { const p = game.players[+e.key - 1]; if (p) { e.preventDefault(); buzz(p.id); } }
+});
+
+renderSetup();
+render();
+})();
+</script>
+
+</body></html>
